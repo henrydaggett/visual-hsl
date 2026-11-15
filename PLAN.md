@@ -299,3 +299,9 @@ its own frame loop. D can develop against a fixed mock camera until B lands.
   swatch so it keeps its colour, and switching back restores the original numbers exactly
   for any swatch that was not edited in between. In HSLuv the radius is CIELUV chroma, so
   the colours form a lumpy solid inside the cylinder and saturation 100 is the gamut edge.
+- **HSV and OKLCH.** Two more spaces in the selector. HSV fills the cylinder like HSL.
+  OKLCH is drawn as its gamut solid, like HSLuv; its middle value is chroma (stored as a
+  whole-number percentage of 0.4, shown the way CSS writes it), and its scale ends at the
+  gamut edge. A swatch can hold more chroma than fits at its current hue and lightness; it
+  is drawn at the edge and gets the chroma back when moved to where it fits.
+- **Cylinder radius** is 1.05 (5% wider).

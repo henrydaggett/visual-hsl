@@ -9,6 +9,7 @@ import {
   subscribeFrame,
   worldToScreen,
 } from '../scene/projection';
+import { effective, spaceOf } from '../lib/spaces';
 import { type Axis, selectedSwatch, useStore } from '../store';
 import {
   TICK,
@@ -146,14 +147,18 @@ export function ControlsOverlay() {
         bump[axis] += Math.max(-ease, Math.min(ease, target - bump[axis]));
       }
 
-      const { h, s, l } = swatch.hsl;
+      const spaceId = useStore.getState().space;
+      const space = spaceOf(spaceId);
+      const { h, s, l } = effective(spaceId, swatch.hsl);
+      /** Top of the middle scale: 100, or the gamut edge where the value is absolute. */
+      const sMax = Math.max(space.maxS(h, l), 1e-6);
       const f = frameOf(view);
       const y = lightnessToY(l);
       const yTop = lightnessToY(100);
       const yBottom = lightnessToY(0);
       const axis = at(f, [0, y, 0]);
-      // Where saturation 100 lies: the cylinder wall in HSL, the gamut edge in HSLuv.
-      const wall = at(f, polar(h, reachRadius(useStore.getState().space, h, l), y));
+      // The most saturated real colour here: the cylinder wall, or the edge of the solid.
+      const wall = at(f, polar(h, reachRadius(spaceId, h, l), y));
 
       // Guide: the cross-section circle at the selected lightness.
       const spanX = Math.hypot(f.ex.x, f.ez.x);
@@ -240,23 +245,23 @@ export function ControlsOverlay() {
         const dy = wall.y - axis.y;
         const length = Math.hypot(dx, dy);
         if (length > 1) sDir = { x: dx / length, y: dy / length };
-        const perUnit = length / 100;
+        const perUnit = length / sMax;
         const step = pickStep(perUnit);
         setLine(radiusLine.current!, axis.x, axis.y, wall.x, wall.y);
         const pool = pools.s;
         pool.begin();
-        for (let v = 0; v <= 100; v += step) {
+        for (let v = 0; v <= sMax; v += step) {
           const style = tickStyle(Math.abs(v - s), perUnit, bump.s);
           if (!style) continue;
-          const bx = axis.x + (dx * v) / 100;
-          const by = axis.y + (dy * v) / 100;
+          const bx = axis.x + (dx * v) / sMax;
+          const by = axis.y + (dy * v) / sMax;
           pool.add(bx, by - SAT_GAP, bx, by - SAT_GAP - style.length, style.stroke, tickWeight(v, perUnit));
         }
         pool.end();
-        const bx = axis.x + (dx * s) / 100;
-        const by = axis.y + (dy * s) / 100;
+        const bx = axis.x + (dx * s) / sMax;
+        const by = axis.y + (dy * s) / sMax;
         setLine(sSelected.current!, bx, by - SAT_GAP, bx, by - SAT_GAP - TICK_SELECTED);
-        setText(sLabel.current!, bx, by - SAT_GAP - TICK_SELECTED - 9, String(s));
+        setText(sLabel.current!, bx, by - SAT_GAP - TICK_SELECTED - 9, space.sLabel(s));
         // When the radius points at the camera, keep a grabbable stub around it.
         // The grab stroke follows the ticks, not the line.
         const pad = Math.max(0, (GAP - length) / 2);
@@ -335,15 +340,15 @@ export function ControlsOverlay() {
         drag.value = clamp(drag.value + dl, 0, 100);
         updateSelected({ l: drag.value });
       } else if (drag.axis === 's') {
-        const y = lightnessToY(swatch.hsl.l);
+        const spaceId = useStore.getState().space;
+        const { h, l } = swatch.hsl;
+        const sMax = spaceOf(spaceId).maxS(h, l);
+        const y = lightnessToY(l);
         const a = at(f, [0, y, 0]);
-        const w = at(
-          f,
-          polar(swatch.hsl.h, reachRadius(useStore.getState().space, swatch.hsl.h, swatch.hsl.l), y),
-        );
+        const w = at(f, polar(h, reachRadius(spaceId, h, l), y));
         const length = Math.hypot(w.x - a.x, w.y - a.y);
         const along = (p.x - prev.x) * sDir.x + (p.y - prev.y) * sDir.y;
-        drag.value = clamp(drag.value + (along / Math.max(length, MIN_DRAG_PX)) * 100, 0, 100);
+        drag.value = clamp(drag.value + (along / Math.max(length, MIN_DRAG_PX)) * sMax, 0, sMax);
         updateSelected({ s: drag.value });
       } else {
         const y = lightnessToY(swatch.hsl.l);
@@ -371,7 +376,9 @@ export function ControlsOverlay() {
         e.stopPropagation();
         e.preventDefault();
         const p = pointerPos(e);
-        drag = { axis, pointerId: e.pointerId, value: swatch.hsl[axis], x: p.x, y: p.y };
+        // Start from the value as shown, which for chroma can be less than the one stored.
+        const shown = effective(useStore.getState().space, swatch.hsl);
+        drag = { axis, pointerId: e.pointerId, value: shown[axis], x: p.x, y: p.y };
         el.setPointerCapture(e.pointerId);
         useStore.getState().setDragging(axis);
       };

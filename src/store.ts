@@ -1,18 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { type HSL, normalizeHsl } from './lib/color';
-import { type SpaceId, convert, fromHex, toHex } from './lib/spaces';
+import { type SpaceId, convert, fromHex } from './lib/spaces';
 
 export type Swatch = {
   id: string;
   /** Hue, saturation and lightness, read in the store's current colour space. */
   hsl: HSL;
   /**
-   * Set when the colour space is switched: the numbers this swatch had in the space it
-   * left, and the hex it arrived with. Switching back restores those numbers exactly if
-   * the colour was not edited in between, so toggling spaces never drifts.
+   * The numbers this swatch had in other colour spaces it has been shown in. Switching to
+   * one of them restores those numbers exactly, so toggling spaces never drifts. Cleared
+   * as soon as the colour is edited, since they no longer describe it.
    */
-  memo?: { space: SpaceId; hsl: HSL; hex: string };
+  memo?: Partial<Record<SpaceId, HSL>>;
 };
 export type Scale = { id: string; name: string; swatches: Swatch[] };
 export type Selection = { scaleId: string; swatchId: string } | null;
@@ -70,9 +70,13 @@ const mapSwatch = (
       ? sc
       : {
           ...sc,
-          swatches: sc.swatches.map((sw) =>
-            sw.id !== swatchId ? sw : { ...sw, hsl: normalizeHsl(fn(sw.hsl)) },
-          ),
+          swatches: sc.swatches.map((sw) => {
+            if (sw.id !== swatchId) return sw;
+            const hsl = normalizeHsl(fn(sw.hsl));
+            const same = hsl.h === sw.hsl.h && hsl.s === sw.hsl.s && hsl.l === sw.hsl.l;
+            // An edit: the numbers remembered from other spaces no longer apply.
+            return same ? sw : { id: sw.id, hsl };
+          }),
         },
   );
 
@@ -91,12 +95,11 @@ export const useStore = create<State>()(
           space: next,
           scales: scales.map((sc) => ({
             ...sc,
-            swatches: sc.swatches.map((sw) => {
-              const back =
-                sw.memo?.space === next && sw.memo.hex === toHex(space, sw.hsl) ? sw.memo.hsl : null;
-              const hsl = back ?? convert(space, next, sw.hsl);
-              return { id: sw.id, hsl, memo: { space, hsl: sw.hsl, hex: toHex(next, hsl) } };
-            }),
+            swatches: sc.swatches.map((sw) => ({
+              id: sw.id,
+              hsl: sw.memo?.[next] ?? convert(space, next, sw.hsl),
+              memo: { ...sw.memo, [space]: sw.hsl },
+            })),
           })),
         });
       },
@@ -169,6 +172,13 @@ export const useStore = create<State>()(
     }),
     {
       name: 'visual-hsl:v1',
+      version: 2,
+      // Version 1 kept a differently shaped memo; drop it rather than misread it.
+      migrate: (persisted) => {
+        const state = persisted as { scales?: Scale[] };
+        state.scales?.forEach((sc) => sc.swatches.forEach((sw) => delete sw.memo));
+        return state;
+      },
       partialize: (state) => ({ scales: state.scales, space: state.space }),
     },
   ),

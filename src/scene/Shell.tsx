@@ -12,13 +12,14 @@ import {
   Vector3,
 } from 'three';
 import { KAPPA, MAX_CHROMA, REF_U, REF_V } from '../lib/hsluv';
+import { CHROMA_WALL } from '../lib/oklch';
+import { spaceOf } from '../lib/spaces';
 import { HEIGHT, R, lightnessToY, polar, type Vec3 } from '../lib/space';
 import { selectedSwatch, useStore } from '../store';
 
 /** Fog density per world unit of depth: idle, and while a colour is selected. */
 const DENSITY_IDLE = 0.95;
 const DENSITY_SELECTED = 0.45;
-const HSLUV_DENSITY = 1.7;
 const SLICE_OPACITY = 0.34;
 const FADE_SECONDS = 0.2;
 
@@ -38,7 +39,7 @@ const vertexShader = /* glsl */ `
 const colourChunk = /* glsl */ `
   uniform float uRadius;
   uniform float uHeight;
-  uniform float uSpace; // 0 = HSL, 1 = HSLuv
+  uniform float uSpace; // the space's "shader" index in spaces.ts
 
   float channel(float n, float h, float a, float l) {
     float k = mod(n + h * 12.0, 12.0);
@@ -92,7 +93,47 @@ const colourChunk = /* glsl */ `
     return vec4(linearToSrgb(clamp(lin, 0.0, 1.0)), clamp(C / 95.0, 0.0, 1.0));
   }
 
+  // HSV: the top of the cylinder is the full-strength colours, with white at its centre.
+  vec4 colourHsv(vec3 p, out float inside) {
+    float h = fract(atan(p.z, p.x) / 6.283185307179586) * 6.0;
+    float s = clamp(length(p.xz) / uRadius, 0.0, 1.0);
+    float v = clamp(p.y / uHeight + 0.5, 0.0, 1.0);
+    vec3 k = mod(vec3(5.0, 3.0, 1.0) + h, 6.0);
+    vec3 rgb = v - v * s * clamp(min(k, 4.0 - k), 0.0, 1.0);
+    inside = 1.0;
+    return vec4(rgb, s * v);
+  }
+
+  // OKLCH: radius is Oklab chroma. As with HSLuv, only what sRGB can show is filled.
+  vec4 colourOklch(vec3 p, out float inside) {
+    inside = 0.0;
+    float L = clamp(p.y / uHeight + 0.5, 0.0, 1.0);
+    float C = length(p.xz) / uRadius * ${CHROMA_WALL};
+    if (L < 0.001) return vec4(0.0);
+    float ang = atan(p.z, p.x);
+    float a = C * cos(ang);
+    float b = C * sin(ang);
+    vec3 lms = vec3(
+      L + 0.3963377774 * a + 0.2158037573 * b,
+      L - 0.1055613458 * a - 0.0638541728 * b,
+      L - 0.0894841775 * a - 1.2914855480 * b
+    );
+    lms = lms * lms * lms;
+    vec3 lin = vec3(
+      4.0767416621 * lms.x - 3.3077115913 * lms.y + 0.2309699292 * lms.z,
+      -1.2684380046 * lms.x + 2.6097574011 * lms.y - 0.3413193965 * lms.z,
+      -0.0041960863 * lms.x - 0.7034186147 * lms.y + 1.7076147010 * lms.z
+    );
+    float lo = min(min(lin.r, lin.g), lin.b);
+    float hi = max(max(lin.r, lin.g), lin.b);
+    // Judged relative to luminance (about L cubed), as in HSLuv, so black stays empty.
+    inside = smoothstep(-0.04, 0.0, lo / (L * L * L)) * (1.0 - smoothstep(1.0, 1.015, hi));
+    return vec4(linearToSrgb(clamp(lin, 0.0, 1.0)), clamp(C / 0.17, 0.0, 1.0));
+  }
+
   vec4 colourAt(vec3 p, out float inside) {
+    if (uSpace > 2.5) return colourOklch(p, inside);
+    if (uSpace > 1.5) return colourHsv(p, inside);
     if (uSpace > 0.5) return colourHsluv(p, inside);
     return colourHsl(p, inside);
   }
@@ -189,9 +230,10 @@ export function Shell() {
   useFrame(({ camera }, delta) => {
     const u = material.uniforms;
     const state = useStore.getState();
-    u.uSpace.value = state.space === 'hsluv' ? 1 : 0;
-    // The HSLuv solid is smaller than the cylinder, so its fog is thicker to match.
-    const boost = state.space === 'hsluv' ? HSLUV_DENSITY : 1;
+    const space = spaceOf(state.space);
+    u.uSpace.value = space.shader;
+    // Solids smaller than the cylinder get thicker fog to match.
+    const boost = space.density;
     const target = (selectedSwatch(state) ? DENSITY_SELECTED : DENSITY_IDLE) * boost;
     u.uDensity.value = approach(u.uDensity.value, target, DENSITY_IDLE * boost, delta);
     // Orthographic: every view ray is parallel, pointing from the scene to the camera.
@@ -238,7 +280,7 @@ export function Slice() {
   useFrame((_, delta) => {
     const state = useStore.getState();
     const swatch = selectedSwatch(state);
-    material.uniforms.uSpace.value = state.space === 'hsluv' ? 1 : 0;
+    material.uniforms.uSpace.value = spaceOf(state.space).shader;
     const u = material.uniforms.uOpacity;
     u.value = approach(u.value, swatch ? SLICE_OPACITY : 0, SLICE_OPACITY, delta);
     if (!mesh.current) return;
