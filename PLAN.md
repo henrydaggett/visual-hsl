@@ -3,8 +3,8 @@
 A single-page tool for placing colours in a 3D HSL cylinder and fine-tuning them with
 three on-model axis controls. Reference sketch: [`docs/sketch.jpg`](docs/sketch.jpg).
 
-Status: plan only, nothing is built yet. Section 9 lists the assumptions that the owner has
-not confirmed.
+Status: plan only, nothing is built yet. The decisions in section 9 are confirmed by the
+owner.
 
 ## 1. What we are building
 
@@ -15,6 +15,7 @@ not confirmed.
 - **Each colour** is a small solid sphere at its HSL position inside the cylinder.
 - **Selecting a colour** (click the sphere or the square) fades the cylinder further and
   shows three tick-mark controls, one per axis, which are dragged to move the colour.
+  With nothing selected, none of the fine-tuning UI is shown.
 
 The brief says "sphere" in places, but the sketch and the control descriptions are a
 cylinder, which is also the natural shape of HSL. This plan builds a cylinder.
@@ -118,23 +119,24 @@ colour sphere, panel text and tick emphasis all update live.
 
 ### 5a. Lightness — screen-fixed ruler on the left
 
-- Always visible on the left of the cylinder, whatever the rotation. It does not rotate
-  with the model. It does follow zoom, so it keeps lining up with the cylinder.
+- Appears only while a colour is selected.
+- Always on the left of the cylinder, whatever the rotation. It does not rotate with the
+  model. It does follow zoom, so it keeps lining up with the cylinder.
 - `x = projectedAxisX − R × zoom − 24px`.
 - The tick for lightness `l` sits at the screen `y` of the axis point at that height, so
   the selected tick lines up with the cross-section circle.
 - Ticks are horizontal, right-aligned towards the cylinder.
 - Drag vertically: `Δl = −Δy / rulerPixelHeight × 100`. The drag is relative (grabbing
   anywhere on the ruler does not make the value jump).
-- With nothing selected the ruler is still drawn (all grey) but is inert.
 
 ### 5b. Hue — ring around the cylinder at the selected lightness
 
 - Appears only while a colour is selected.
 - A circle in world space at the selected height, with radius `R + 24px / zoom`, so it
   stays 24px outside the cylinder on screen at any zoom.
-- Ticks are vertical (parallel to the cylinder axis) and centred on the ring. The selected
-  tick is the longer black vertical line at the colour's hue.
+- Every tick is vertical (parallel to the cylinder axis), centred on the ring, and the
+  ticks run all the way around the circle. The selected tick is the longer black vertical
+  line at the colour's hue.
 - Ticks on the far side of the ring are drawn at about 35% opacity so the ring reads as 3D.
 - Drag around the ring. Primary mapping: intersect the pointer ray with the plane
   `y = selected height`, take the angle about the axis, and apply the change in angle
@@ -162,6 +164,15 @@ colour sphere, panel text and tick emphasis all update live.
   to each square: hex (`#2F6FED`) and `hsl(217, 84%, 56%)` in small monospace text.
 - Click a square to select it (same selection as clicking the sphere). The selected square
   gets a dark outline.
+- **The hex value is an editable text field.** Typing or pasting a valid 3- or 6-digit hex
+  (with or without `#`) and pressing Enter or leaving the field moves the colour. Invalid
+  input reverts to the current value. Details:
+  - The typed colour is converted to HSL and rounded to whole numbers, so the field may
+    settle on a hex one or two steps away from what was typed (for example `#2F6FED`
+    becoming `#3070EE`). This follows from keeping whole-number HSL as the source of truth.
+  - If the typed colour is a grey, black or white, its hue is undefined, so the swatch
+    keeps its previous hue (and for black or white, its previous saturation too).
+  - Key presses inside the field must not trigger the `Delete`/`Backspace` shortcut below.
 - `+` button under the last square. It duplicates the selected colour (or the last one if
   nothing is selected), nudges lightness by 8 so the new point is not hidden behind the
   old one, and selects it. Hidden when the column has 12.
@@ -175,12 +186,15 @@ colour sphere, panel text and tick emphasis all update live.
 
 | h | s | l |
 |---|---|---|
-| 215 | 90 | 92 |
-| 215 | 88 | 78 |
-| 215 | 85 | 62 |
-| 215 | 85 | 48 |
-| 215 | 80 | 34 |
-| 215 | 75 | 20 |
+| 212 | 95 | 92 |
+| 214 | 90 | 79 |
+| 217 | 86 | 64 |
+| 220 | 82 | 50 |
+| 223 | 78 | 36 |
+| 226 | 72 | 22 |
+
+Hue and saturation drift slightly down the scale on purpose, so the points do not sit in
+a straight vertical line and movement on all three axes is visible.
 
 ## 7. State and shared contracts
 
@@ -188,6 +202,7 @@ colour sphere, panel text and tick emphasis all update live.
 // src/lib/color.ts
 type HSL = { h: number; s: number; l: number }; // h 0–359, s and l 0–100, integers
 hslToHex(hsl): string
+parseHex(text): HSL | null                      // 3 or 6 digits, optional "#", rounded
 hslToRgb(hsl): [number, number, number]        // 0–1, for three.js
 formatHsl(hsl): string                          // "hsl(215, 85%, 62%)"
 
@@ -199,6 +214,7 @@ type Selection = { scaleId: string; swatchId: string } | null;
 state:   scales: Scale[]; selection: Selection; dragging: 'h' | 's' | 'l' | null
 actions: select(sel), addSwatch(scaleId), removeSwatch(scaleId, swatchId),
          updateSelected(patch: Partial<HSL>)   // clamps s and l, wraps h, rounds
+         setHex(scaleId, swatchId, text)       // parseHex, keeps old hue for greys
 ```
 
 - **HSL is the source of truth; hex is always derived.** Storing hex would lose the hue
@@ -219,7 +235,7 @@ parallel: they only meet at the store and at `space.ts`, and each owns its own f
 |---|---|---|---|
 | A | Scaffold and foundations | `package.json`, Vite config, `src/main.tsx`, `src/App.tsx` (two-pane layout with placeholders), `src/styles.css`, `src/lib/color.ts`, `src/lib/space.ts`, `src/store.ts`, unit tests | `npm run dev`, `npm run build` and `npm test` pass. Colour round-trips and clamping are unit-tested. Seed data loads. |
 | B | 3D scene | `src/scene/*` (canvas, camera and orbit, cylinder shader, outline, points, picking), plus `src/scene/projection.ts` exposing the live camera for the overlay | Cylinder renders faintly, rotates and zooms. Seed blues appear at the right positions. Click selects and deselects. Shell fades on selection. |
-| C | Panel | `src/panel/*` | Squares with hex and HSL, selection synced with the store, add, remove, the 12 cap, keyboard shortcuts, persistence. |
+| C | Panel | `src/panel/*` | Squares with hex and HSL, hex typing, selection synced with the store, add, remove, the 12 cap, keyboard shortcuts, persistence. |
 | D | Axis controls | `src/controls/*` (overlay, tick renderer, lightness ruler, hue ring, saturation line, guides, drag maths) | All three controls behave as in section 5, at any rotation and zoom, and the model stays still while dragging. |
 | E | Integration and QA | Wiring in `App.tsx`, Playwright smoke test, README | Checklist below passes, with screenshots attached. |
 
@@ -240,22 +256,22 @@ its own frame loop. D can develop against a fixed mock camera until B lands.
       side-on.
 - [ ] Add up to 12, the `+` disappears at 12, remove works, reload restores the colours.
 - [ ] Rotating the model never changes the selection.
+- [ ] With nothing selected, no ruler, ring, saturation ticks or guides are visible.
+- [ ] Typing a valid hex moves the sphere and updates the HSL text; invalid text reverts;
+      typing a grey keeps the previous hue; Backspace in the field does not delete the
+      swatch.
 
-## 9. Assumptions to confirm
-
-These are defaults chosen so the build is not blocked. Each is cheap to change now and
-more expensive later.
+## 9. Confirmed decisions
 
 1. **Cylinder, not sphere** (see section 1).
-2. **Hue tick orientation.** The brief says both "a longer horizontal one for the selected
-   one" and "the lines should be vertical". This plan makes every hue tick vertical,
-   including the selected one.
-3. **Lightness ruler when nothing is selected:** shown, grey and inert. The alternative is
-   to hide it until a colour is selected.
-4. **Only the cylinder fades on selection.** The other colour points stay at full
-   strength so the scale can still be read as a whole.
-5. **Whole-number HSL values** (no decimals).
-6. **Remove and persistence** were not in the brief but are included because the tool is
-   awkward without them.
-7. **Not in version 1:** typing a hex value to edit, adding more columns from the UI,
-   lines connecting the points of a scale, export. The data model leaves room for each.
+2. **Hue ticks are all vertical**, including the selected one, and run around the full
+   circle.
+3. **All fine-tuning UI is hidden when nothing is selected**: lightness ruler, hue ring,
+   saturation ticks and guides.
+4. **Only the cylinder's colours fade on selection.** The colour points stay at full
+   strength.
+5. **Whole-number HSL values** for version 1.
+6. **Included beyond the original brief:** removing a colour, saving to local storage,
+   typing a hex value.
+7. **Not in version 1:** adding more columns from the UI, export, lines connecting the
+   points of a scale. The data model leaves room for each.
