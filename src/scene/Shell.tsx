@@ -273,7 +273,7 @@ export function Rims() {
     if (sides.current) sides.current.rotation.y = Math.atan2(direction.x, direction.z);
   });
 
-  const style = { color: '#bcbcbc', lineWidth: 1, toneMapped: false, transparent: true, renderOrder: 2 };
+  const style = { color: '#d2d2d2', lineWidth: 1, toneMapped: false, transparent: true, renderOrder: 2 };
   return (
     <>
       <Line points={top} {...style} />

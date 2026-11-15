@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ControlsOverlay } from './controls/ControlsOverlay';
-import { SPACES, type SpaceId, formatIn, toHex } from './lib/spaces';
+import { SPACES, type SpaceId, formatIn, spaceOf, toHex } from './lib/spaces';
 import { Panel } from './panel/Panel';
 import { Scene } from './scene/Scene';
 import { selectedSwatch, useStore } from './store';
@@ -42,7 +42,13 @@ function SpacePicker() {
   const setSpace = useStore((s) => s.setSpace);
   return (
     <label className="space-picker">
-      <span>Colour space</span>
+      <span className="space-picker-label">Colour space</span>
+      <span className="space-picker-value">{spaceOf(space).label}</span>
+      <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden="true">
+        <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      {/* The real control covers the whole button, invisibly, so a click anywhere on it
+          opens the native picker. */}
       <select value={space} onChange={(e) => setSpace(e.target.value as SpaceId)}>
         {SPACES.map((sp) => (
           <option key={sp.id} value={sp.id}>
