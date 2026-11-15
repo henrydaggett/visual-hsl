@@ -25,6 +25,8 @@ import './controls.css';
 
 /** Screen gap between the cylinder and the lightness ruler / hue ring. */
 const GAP = 24;
+/** The lightness ruler sits this much further out, clear of the hue ring. */
+const RULER_EXTRA = 8;
 /** Smallest on-screen length used as a drag divisor, so foreshortened controls stay usable. */
 const MIN_DRAG_PX = 40;
 const FAR_OPACITY = 0.35;
@@ -157,7 +159,7 @@ export function ControlsOverlay() {
 
       // Lightness: screen-fixed vertical ruler left of the cylinder.
       {
-        const x = f.o.x - R * f.ppu - GAP;
+        const x = f.o.x - R * f.ppu - GAP - RULER_EXTRA;
         const top = at(f, [0, yTop, 0]).y;
         const bottom = at(f, [0, yBottom, 0]).y;
         const perUnit = Math.abs(bottom - top) / 100;

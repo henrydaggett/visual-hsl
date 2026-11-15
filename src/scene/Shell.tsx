@@ -17,7 +17,7 @@ import { selectedSwatch, useStore } from '../store';
 /** Fog density per world unit of depth: idle, and while a colour is selected. */
 const DENSITY_IDLE = 0.95;
 const DENSITY_SELECTED = 0.45;
-const SLICE_OPACITY = 0.42;
+const SLICE_OPACITY = 0.34;
 const FADE_SECONDS = 0.2;
 
 const vertexShader = /* glsl */ `
