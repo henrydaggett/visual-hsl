@@ -11,6 +11,7 @@ import {
 } from '../scene/projection';
 import { type Axis, selectedSwatch, useStore } from '../store';
 import {
+  TICK,
   TICK_SELECTED,
   TickPool,
   pickStep,
@@ -222,7 +223,8 @@ export function ControlsOverlay() {
         setEllipse(hHit.current!, axis.x, axis.y, rr * spanX, rr * spanY);
       }
 
-      // Saturation: ticks standing on the radius line, 0 at the axis to 100 at the wall.
+      // Saturation: ticks standing above the radius line, 0 at the axis to 100 at the
+      // wall, the same gap from it as the other scales keep from the cylinder.
       {
         const dx = wall.x - axis.x;
         const dy = wall.y - axis.y;
@@ -238,21 +240,23 @@ export function ControlsOverlay() {
           if (!style) continue;
           const bx = axis.x + (dx * v) / 100;
           const by = axis.y + (dy * v) / 100;
-          pool.add(bx, by, bx, by - style.length, style.stroke, tickWeight(v, perUnit));
+          pool.add(bx, by - GAP, bx, by - GAP - style.length, style.stroke, tickWeight(v, perUnit));
         }
         pool.end();
         const bx = axis.x + (dx * s) / 100;
         const by = axis.y + (dy * s) / 100;
-        setLine(sSelected.current!, bx, by, bx, by - TICK_SELECTED);
-        setText(sLabel.current!, bx, by - TICK_SELECTED - 9, String(s));
+        setLine(sSelected.current!, bx, by - GAP, bx, by - GAP - TICK_SELECTED);
+        setText(sLabel.current!, bx, by - GAP - TICK_SELECTED - 9, String(s));
         // When the radius points at the camera, keep a grabbable stub around it.
+        // The grab stroke follows the ticks, not the line.
         const pad = Math.max(0, (GAP - length) / 2);
+        const lift = GAP + TICK / 2;
         setLine(
           sHit.current!,
           axis.x - sDir.x * pad,
-          axis.y - sDir.y * pad,
+          axis.y - sDir.y * pad - lift,
           wall.x + sDir.x * pad,
-          wall.y + sDir.y * pad,
+          wall.y + sDir.y * pad - lift,
         );
         sHit.current!.style.cursor = cursorAlong(sDir.x, sDir.y);
       }
