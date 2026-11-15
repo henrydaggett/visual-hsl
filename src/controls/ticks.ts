@@ -43,14 +43,16 @@ export function tickWeight(value: number, pixelsPerUnit: number): number {
 
 /**
  * Length and colour of an ordinary tick `distance` units from the selected value, or null
- * if it would collide with the selected tick.
+ * if it would collide with the selected tick. `bump` (0–1) is how strongly neighbours ease
+ * towards the selected style: 0 leaves every ordinary tick short and grey, which is the
+ * resting state; it rises to 1 while that scale is being dragged.
  */
-export function tickStyle(distance: number, pixelsPerUnit: number) {
+export function tickStyle(distance: number, pixelsPerUnit: number, bump: number) {
   const px = distance * pixelsPerUnit;
   if (px < CLEARANCE) return null;
   const t = Math.max(0, 1 - px / BUMP_PX);
   // Peaked rather than flat-topped, so the selected tick still stands clear of the bump.
-  const e = t * t;
+  const e = t * t * bump;
   const c = Math.round(GREY + (INK - GREY) * e);
   return { length: TICK + (TICK_SELECTED - TICK) * e, stroke: `rgb(${c},${c},${c})` };
 }

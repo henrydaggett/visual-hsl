@@ -27,6 +27,8 @@ const GAP = 24;
 /** Smallest on-screen length used as a drag divisor, so foreshortened controls stay usable. */
 const MIN_DRAG_PX = 40;
 const FAR_OPACITY = 0.35;
+/** Time for a scale's neighbour bump to ease in or out. */
+const BUMP_MS = 150;
 const EDGE_ON = Math.sin((10 * Math.PI) / 180);
 
 type Pt = { x: number; y: number };
@@ -111,6 +113,10 @@ export function ControlsOverlay() {
       h: new TickPool(hTicks.current!),
       s: new TickPool(sTicks.current!),
     };
+    /** How far each scale's neighbour bump has eased in (0–1). Only the scale being
+     *  dragged shows it; at rest just the selected tick is long. */
+    const bump = { l: 0, h: 0, s: 0 };
+    let lastDraw = performance.now();
     /** Last well-defined on-screen direction of the saturation radius. */
     let sDir: Pt = { x: 1, y: 0 };
 
@@ -125,6 +131,15 @@ export function ControlsOverlay() {
         return;
       }
       group.style.display = '';
+
+      const now = performance.now();
+      const ease = Math.min(1, (now - lastDraw) / BUMP_MS);
+      lastDraw = now;
+      const dragging = useStore.getState().dragging;
+      for (const axis of ['l', 'h', 's'] as const) {
+        const target = dragging === axis ? 1 : 0;
+        bump[axis] += Math.max(-ease, Math.min(ease, target - bump[axis]));
+      }
 
       const { h, s, l } = swatch.hsl;
       const f = frameOf(view);
@@ -149,7 +164,7 @@ export function ControlsOverlay() {
         const pool = pools.l;
         pool.begin();
         for (let v = 0; v <= 100; v += step) {
-          const style = tickStyle(Math.abs(v - l), perUnit);
+          const style = tickStyle(Math.abs(v - l), perUnit, bump.l);
           if (!style) continue;
           const ty = bottom + ((top - bottom) * v) / 100;
           pool.add(x - style.length, ty, x, ty, style.stroke, tickWeight(v, perUnit));
@@ -177,7 +192,7 @@ export function ControlsOverlay() {
         const pool = pools.h;
         pool.begin();
         for (let deg = 0; deg < 360; deg += step) {
-          const style = tickStyle(hueDistance(deg, h), perDegree);
+          const style = tickStyle(hueDistance(deg, h), perDegree, bump.h);
           if (!style) continue;
           const p = at(f, polar(deg, rr, y));
           const half = style.length / 2;
@@ -219,7 +234,7 @@ export function ControlsOverlay() {
         const pool = pools.s;
         pool.begin();
         for (let v = 0; v <= 100; v += step) {
-          const style = tickStyle(Math.abs(v - s), perUnit);
+          const style = tickStyle(Math.abs(v - s), perUnit, bump.s);
           if (!style) continue;
           const bx = axis.x + (dx * v) / 100;
           const by = axis.y + (dy * v) / 100;
