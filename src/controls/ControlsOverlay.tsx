@@ -24,12 +24,12 @@ import {
 } from './ticks';
 import './controls.css';
 
-/** Screen gap between the cylinder and the lightness ruler / hue ring. */
-const GAP = 24;
+/** Screen gap between the cylinder and the lightness ruler. */
+const RULER_GAP = 32;
+/** The hue ring sits half way between the cylinder and the lightness ruler. */
+const RING_GAP = RULER_GAP / 2;
 /** Gap between the saturation scale and the line it measures. */
 const SAT_GAP = 20;
-/** The lightness ruler sits this much further out, clear of the hue ring. */
-const RULER_EXTRA = 8;
 /** Smallest on-screen length used as a drag divisor, so foreshortened controls stay usable. */
 const MIN_DRAG_PX = 40;
 const FAR_OPACITY = 0.35;
@@ -77,8 +77,8 @@ const hueDistance = (a: number, b: number) => {
   const d = Math.abs(a - b) % 360;
   return d > 180 ? 360 - d : d;
 };
-/** World radius of the hue ring: 24px outside the cylinder at any zoom. */
-const ringRadius = (f: Frame) => R + GAP / f.ppu;
+/** World radius of the hue ring: half way to the lightness ruler at any zoom. */
+const ringRadius = (f: Frame) => R + RING_GAP / f.ppu;
 /** On-screen height of the lightness ruler (0 when looking straight down the axis). */
 const rulerHeight = (f: Frame) => Math.abs(HEIGHT * f.ey.y);
 
@@ -167,7 +167,7 @@ export function ControlsOverlay() {
 
       // Lightness: screen-fixed vertical ruler left of the cylinder.
       {
-        const x = f.o.x - R * f.ppu - GAP - RULER_EXTRA;
+        const x = f.o.x - R * f.ppu - RULER_GAP;
         const top = at(f, [0, yTop, 0]).y;
         const bottom = at(f, [0, yBottom, 0]).y;
         const perUnit = Math.abs(bottom - top) / 100;
@@ -189,7 +189,7 @@ export function ControlsOverlay() {
         setLine(lHit.current!, x - 16, top - 6, x - 16, bottom + 6);
       }
 
-      // Hue: ring 24px outside the cylinder at the selected height; every tick vertical.
+      // Hue: ring half way to the lightness ruler at the selected height; every tick vertical.
       {
         const rr = ringRadius(f);
         const perDegree = (rr * f.ppu * Math.PI) / 180; // along the major axis: stable
@@ -264,7 +264,7 @@ export function ControlsOverlay() {
         setText(sLabel.current!, bx, by - SAT_GAP - TICK_SELECTED - 9, space.sLabel(s));
         // When the radius points at the camera, keep a grabbable stub around it.
         // The grab stroke follows the ticks, not the line.
-        const pad = Math.max(0, (GAP - length) / 2);
+        const pad = Math.max(0, (24 - length) / 2);
         const lift = SAT_GAP + TICK / 2;
         setLine(
           sHit.current!,
