@@ -1,0 +1,69 @@
+/* Axis controls overlay: one SVG above the canvas. Geometry is written per frame from JS. */
+.controls {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.controls line,
+.controls ellipse,
+.controls path {
+  fill: none;
+}
+
+.controls-guide {
+  stroke: #999;
+  stroke-width: 1;
+}
+.controls-guide.is-circle {
+  opacity: 0.55;
+}
+.controls-guide.is-slice {
+  opacity: 0.3;
+}
+.controls-guide.is-radius {
+  stroke: #8a8a8a;
+  opacity: 0.9;
+}
+
+.controls-ticks line {
+  stroke-width: 1;
+}
+
+.controls-selected {
+  stroke: #111;
+  stroke-width: 2;
+}
+
+.controls-label {
+  font: 12px var(--font);
+  font-variant-numeric: tabular-nums;
+  fill: #111;
+  /* Halo in the page colour so the number stays readable over ticks and guides. */
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  paint-order: stroke;
+  dominant-baseline: central;
+}
+
+/* Invisible 24px-wide grab strokes. The only parts of the overlay that take the pointer. */
+.controls-hit {
+  stroke: transparent;
+  stroke-width: 24;
+  stroke-linecap: round;
+  pointer-events: stroke;
+  touch-action: none;
+}
+.controls-hit.is-l {
+  cursor: ns-resize;
+}
+.controls-hit.is-h {
+  cursor: ew-resize;
+}
+.controls-hit.is-s {
+  cursor: ew-resize;
+}
