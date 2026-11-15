@@ -16,7 +16,7 @@ import { selectedSwatch, useStore } from '../store';
 
 /** Fog density per world unit of depth: idle, and while a colour is selected. */
 const DENSITY_IDLE = 0.95;
-const DENSITY_SELECTED = 0.2;
+const DENSITY_SELECTED = 0.45;
 const SLICE_OPACITY = 0.42;
 const FADE_SECONDS = 0.2;
 
@@ -219,7 +219,7 @@ export function Rims() {
     if (sides.current) sides.current.rotation.y = Math.atan2(direction.x, direction.z);
   });
 
-  const style = { color: '#9c9c9c', lineWidth: 1, toneMapped: false, transparent: true, renderOrder: 2 };
+  const style = { color: '#bcbcbc', lineWidth: 1, toneMapped: false, transparent: true, renderOrder: 2 };
   return (
     <>
       <Line points={top} {...style} />

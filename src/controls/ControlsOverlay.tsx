@@ -212,12 +212,17 @@ export function ControlsOverlay() {
         setLine(hSelected.current!, p.x, p.y - half, p.x, p.y + half);
         // Dimmed less than its neighbours: it has to stay findable on the far side.
         hSelected.current!.setAttribute('stroke-opacity', String(Math.max(opacity(h), 0.6)));
-        // Label on the outside of the ring, away from its centre.
+        // Label beside the tick, level with its centre, on the side away from the ring's
+        // centre. Near the front and back of the ring there is no "side", so there it
+        // slides below or above the tick instead.
         const out = Math.hypot(p.x - axis.x, p.y - axis.y) || 1;
+        const ox = (p.x - axis.x) / out;
+        const oy = (p.y - axis.y) / out;
+        const sideways = Math.min(1, Math.abs(ox) / 0.35);
         setText(
           hLabel.current!,
-          p.x + ((p.x - axis.x) / out) * 20,
-          p.y + ((p.y - axis.y) / out) * (half + 10),
+          p.x + Math.sign(ox) * sideways * 22,
+          p.y + oy * (1 - sideways) * (half + 10),
           `${h}°`,
         );
         setEllipse(hHit.current!, axis.x, axis.y, rr * spanX, rr * spanY);

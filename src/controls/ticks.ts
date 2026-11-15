@@ -11,7 +11,7 @@ const SPACING_MIN = 4.5;
 const SPACING_FULL = 8;
 /** Tick levels, in units. Each is a multiple of the one before, so levels nest. */
 const LEVELS = [1, 5, 10, 20];
-const GREY = 181; // #b5b5b5
+const GREY = 150; // #969696
 const INK = 17; // #111
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
