@@ -81,7 +81,15 @@ export const useStore = create<State>()(
           scale.swatches[scale.swatches.length - 1];
         const base = source?.hsl ?? { h: 215, s: 85, l: 50 };
         // Nudge so the new point is not hidden behind its source.
-        const l = base.l >= 8 ? base.l - 8 : base.l + 8;
+        // Step darker in 8s to the first free lightness, then lighter if none is left.
+        const taken = (l: number) =>
+          scale.swatches.some(
+            (sw) => sw.hsl.h === base.h && sw.hsl.s === base.s && sw.hsl.l === l,
+          );
+        const candidates = [];
+        for (let l = base.l - 8; l >= 0; l -= 8) candidates.push(l);
+        for (let l = base.l + 8; l <= 100; l += 8) candidates.push(l);
+        const l = candidates.find((c) => !taken(c)) ?? base.l;
         const swatch: Swatch = { id: newId(), hsl: normalizeHsl({ ...base, l }) };
         set({
           scales: scales.map((sc) =>
