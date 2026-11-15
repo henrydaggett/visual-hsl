@@ -1,0 +1,48 @@
+:root {
+  --bg: #ececec;
+  --ink: #111;
+  --ink-soft: #777;
+  --line: #d4d4d4;
+  --tick: #b5b5b5;
+  --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  height: 100%;
+}
+
+/* Wraps the canvas and the controls overlay. OrbitControls listens here. */
+.stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  touch-action: none;
+  user-select: none;
+}
+
+.panel {
+  flex: none;
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+}
