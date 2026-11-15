@@ -18,6 +18,7 @@ import {
   setLine,
   setText,
   tickStyle,
+  tickWeight,
 } from './ticks';
 import './controls.css';
 
@@ -89,7 +90,6 @@ export function ControlsOverlay() {
   const root = useRef<SVGGElement>(null);
 
   const guideCircle = useRef<SVGEllipseElement>(null);
-  const guideSlice = useRef<SVGPathElement>(null);
   const radiusLine = useRef<SVGLineElement>(null);
 
   const lTicks = useRef<SVGGElement>(null);
@@ -134,20 +134,10 @@ export function ControlsOverlay() {
       const axis = at(f, [0, y, 0]);
       const wall = at(f, polar(h, R, y));
 
-      // Guides: cross-section circle, and the slice through the selected hue.
+      // Guide: the cross-section circle at the selected lightness.
       const spanX = Math.hypot(f.ex.x, f.ez.x);
       const spanY = Math.hypot(f.ex.y, f.ez.y);
       setEllipse(guideCircle.current!, axis.x, axis.y, R * spanX, R * spanY);
-      const slice = [
-        at(f, [0, yTop, 0]),
-        at(f, polar(h, R, yTop)),
-        at(f, polar(h, R, yBottom)),
-        at(f, [0, yBottom, 0]),
-      ];
-      guideSlice.current!.setAttribute(
-        'd',
-        'M' + slice.map((p) => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join('L') + 'Z',
-      );
 
       // Lightness: screen-fixed vertical ruler left of the cylinder.
       {
@@ -162,7 +152,7 @@ export function ControlsOverlay() {
           const style = tickStyle(Math.abs(v - l), perUnit);
           if (!style) continue;
           const ty = bottom + ((top - bottom) * v) / 100;
-          pool.add(x - style.length, ty, x, ty, style.stroke);
+          pool.add(x - style.length, ty, x, ty, style.stroke, tickWeight(v, perUnit));
         }
         pool.end();
         setLine(lSelected.current!, x - TICK_SELECTED, axis.y, x, axis.y);
@@ -191,7 +181,14 @@ export function ControlsOverlay() {
           if (!style) continue;
           const p = at(f, polar(deg, rr, y));
           const half = style.length / 2;
-          pool.add(p.x, p.y - half, p.x, p.y + half, style.stroke, opacity(deg));
+          pool.add(
+            p.x,
+            p.y - half,
+            p.x,
+            p.y + half,
+            style.stroke,
+            opacity(deg) * tickWeight(deg, perDegree),
+          );
         }
         pool.end();
         const p = at(f, polar(h, rr, y));
@@ -226,7 +223,7 @@ export function ControlsOverlay() {
           if (!style) continue;
           const bx = axis.x + (dx * v) / 100;
           const by = axis.y + (dy * v) / 100;
-          pool.add(bx, by, bx, by - style.length, style.stroke);
+          pool.add(bx, by, bx, by - style.length, style.stroke, tickWeight(v, perUnit));
         }
         pool.end();
         const bx = axis.x + (dx * s) / 100;
@@ -388,7 +385,6 @@ export function ControlsOverlay() {
   return (
     <svg ref={svg} className="controls" aria-hidden="true">
       <g ref={root} style={{ display: 'none' }}>
-        <path ref={guideSlice} className="controls-guide is-slice" />
         <ellipse ref={guideCircle} className="controls-guide is-circle" />
 
         <g ref={lTicks} className="controls-ticks" />

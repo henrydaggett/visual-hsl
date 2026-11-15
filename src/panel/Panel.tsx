@@ -3,14 +3,21 @@ import { formatHsl, hslToHex } from '../lib/color';
 import { MAX_SWATCHES, type Scale, type Swatch, useStore } from '../store';
 import './panel.css';
 
-export function Panel() {
+/** `onClose` dismisses the panel on narrow screens, where it is a full-page sheet. */
+export function Panel({ onClose }: { onClose: () => void }) {
   const scales = useStore((s) => s.scales);
   useShortcuts();
   return (
     <aside className="panel" aria-label="Colour scales">
+      <header className="panel-header">
+        <span>Colours</span>
+        <button type="button" className="panel-close" aria-label="Close colours" onClick={onClose}>
+          ×
+        </button>
+      </header>
       <div className="panel-scales">
         {scales.map((scale) => (
-          <ScaleColumn key={scale.id} scale={scale} />
+          <ScaleColumn key={scale.id} scale={scale} onClose={onClose} />
         ))}
       </div>
     </aside>
@@ -42,7 +49,7 @@ function useShortcuts() {
   }, []);
 }
 
-function ScaleColumn({ scale }: { scale: Scale }) {
+function ScaleColumn({ scale, onClose }: { scale: Scale; onClose: () => void }) {
   const addSwatch = useStore((s) => s.addSwatch);
   const selectedId = useStore((s) =>
     s.selection?.scaleId === scale.id ? s.selection.swatchId : null,
@@ -58,6 +65,7 @@ function ScaleColumn({ scale }: { scale: Scale }) {
             swatch={swatch}
             index={i}
             selected={swatch.id === selectedId}
+            onClose={onClose}
           />
         ))}
       </ul>
@@ -81,11 +89,13 @@ function SwatchRow({
   swatch,
   index,
   selected,
+  onClose,
 }: {
   scaleId: string;
   swatch: Swatch;
   index: number;
   selected: boolean;
+  onClose: () => void;
 }) {
   const select = useStore((s) => s.select);
   const removeSwatch = useStore((s) => s.removeSwatch);
@@ -111,7 +121,8 @@ function SwatchRow({
         style={{ background: hex }}
         aria-pressed={selected}
         aria-label={`Colour ${index + 1}, ${hex}`}
-        onClick={pick}
+        // Tapping the square goes back to the model on narrow screens (no-op on wide).
+        onClick={onClose}
       />
       <div className="swatch-meta">
         <HexField scaleId={scaleId} swatchId={swatch.id} hex={hex} index={index} onFocus={pick} />

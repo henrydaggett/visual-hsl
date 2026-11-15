@@ -275,3 +275,18 @@ its own frame loop. D can develop against a fixed mock camera until B lands.
    typing a hex value.
 7. **Not in version 1:** adding more columns from the UI, export, lines connecting the
    points of a scale. The data model leaves room for each.
+
+## 10. Changes after version 1
+
+- **Responsive and touch.** Below 720px wide the panel is a full-page sheet opened from an
+  icon button (top right); tapping a square returns to the model, and a small readout at
+  the bottom shows the selected colour's hex and HSL. One finger rotates, two fingers
+  pinch to zoom, and the controls and points have larger touch targets.
+- **Cylinder colour.** The far wall carries the colour; the near wall and the caps are much
+  fainter, so opposite hues no longer blend into grey.
+- **Tick density follows zoom.** Tick levels are 1, 5, 10 and 20 units; a finer level fades
+  in once its ticks would be about 4.5–8px apart. This replaces the `{1, 2, 5, 10}` rule
+  in section 5.
+- **Guides removed.** The slice rectangle (axis line and the lines out to the wall) is
+  gone. The cross-section circle and the saturation baseline remain.
+- **Other points fade** to about 22% while one is selected.

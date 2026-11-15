@@ -17,12 +17,14 @@ const MIN_ZOOM_FACTOR = 0.5;
 const MAX_ZOOM_FACTOR = 6;
 /** A press only counts as a click if the pointer moved less than this many pixels. */
 const CLICK_SLOP = 4;
+/** Fingers wobble more than a mouse. */
+const TAP_SLOP = 10;
 
 /** Zoom (pixels per world unit) at which the cylinder fills ~58% of the stage height
  *  in the default view, without getting too wide for a narrow stage. */
 function defaultZoomFor(width: number, height: number) {
   const viewHeight = HEIGHT * Math.cos(DEFAULT_ELEVATION) + 2 * R * Math.sin(DEFAULT_ELEVATION);
-  return Math.max(1, Math.min((0.58 * height) / viewHeight, (0.6 * width) / (2 * R)));
+  return Math.max(1, Math.min((0.58 * height) / viewHeight, (0.54 * width) / (2 * R)));
 }
 
 /** Camera framing, orbit, the per-frame publish for the overlay, and picking. */
@@ -68,17 +70,19 @@ export function Rig({ stage }: { stage: HTMLElement }) {
       const view = getView();
       if (!view) return null;
       const p = local(e);
-      return pickSwatch(view, useStore.getState().scales, p.x, p.y);
+      return pickSwatch(view, useStore.getState().scales, p.x, p.y, e.pointerType === 'touch');
     };
 
     const onDown = (e: PointerEvent) => {
+      // A second finger means a pinch, which must never end as a tap.
       down = e.button === 0 && e.isPrimary && onScene(e) ? { x: e.clientX, y: e.clientY, id: e.pointerId } : null;
     };
     const onUp = (e: PointerEvent) => {
       const start = down;
       down = null;
       if (!start || start.id !== e.pointerId) return;
-      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) >= CLICK_SLOP) return;
+      const slop = e.pointerType === 'touch' ? TAP_SLOP : CLICK_SLOP;
+      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) >= slop) return;
       const state = useStore.getState();
       if (state.dragging !== null) return;
       state.select(hit(e));

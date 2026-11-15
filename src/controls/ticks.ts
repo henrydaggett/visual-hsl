@@ -2,20 +2,43 @@
 
 export const TICK = 8;
 export const TICK_SELECTED = 20;
-/** Neighbouring ticks ease towards the selected style over this many units. */
-const BUMP_UNITS = 6;
+/** Neighbouring ticks ease towards the selected style over this many pixels. */
+const BUMP_PX = 36;
 /** Ordinary ticks closer than this (px) to the selected tick are dropped, so it stays clean. */
 const CLEARANCE = 3;
-const MIN_SPACING = 4;
+/** A level of ticks starts to fade in at SPACING_MIN px apart and is solid at SPACING_FULL. */
+const SPACING_MIN = 4.5;
+const SPACING_FULL = 8;
+/** Tick levels, in units. Each is a multiple of the one before, so levels nest. */
+const LEVELS = [1, 5, 10, 20];
 const GREY = 181; // #b5b5b5
 const INK = 17; // #111
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/** Smallest step from {1, 2, 5, 10} units whose ticks are at least ~4px apart on screen. */
+const levelWeight = (level: number, pixelsPerUnit: number) => {
+  const t = (level * pixelsPerUnit - SPACING_MIN) / (SPACING_FULL - SPACING_MIN);
+  return Math.min(1, Math.max(0, t));
+};
+
+/**
+ * Finest tick step (in units) worth drawing at this scale. Density follows zoom: zoomed
+ * out, only every 20th, 10th or 5th unit has a tick; zoomed in, every unit does.
+ */
 export function pickStep(pixelsPerUnit: number): number {
-  for (const step of [1, 2, 5]) if (step * pixelsPerUnit >= MIN_SPACING) return step;
-  return 10;
+  for (const level of LEVELS) if (levelWeight(level, pixelsPerUnit) > 0) return level;
+  return LEVELS[LEVELS.length - 1];
+}
+
+/**
+ * Opacity of the tick at whole value `value`. Ticks of a finer level fade in as zooming
+ * makes room for them, instead of popping.
+ */
+export function tickWeight(value: number, pixelsPerUnit: number): number {
+  for (let i = LEVELS.length - 1; i >= 0; i--)
+    if (value % LEVELS[i] === 0)
+      return i === LEVELS.length - 1 ? 1 : levelWeight(LEVELS[i], pixelsPerUnit);
+  return 0;
 }
 
 /**
@@ -23,8 +46,9 @@ export function pickStep(pixelsPerUnit: number): number {
  * if it would collide with the selected tick.
  */
 export function tickStyle(distance: number, pixelsPerUnit: number) {
-  if (distance * pixelsPerUnit < CLEARANCE) return null;
-  const t = Math.max(0, 1 - distance / BUMP_UNITS);
+  const px = distance * pixelsPerUnit;
+  if (px < CLEARANCE) return null;
+  const t = Math.max(0, 1 - px / BUMP_PX);
   // Peaked rather than flat-topped, so the selected tick still stands clear of the bump.
   const e = t * t;
   const c = Math.round(GREY + (INK - GREY) * e);

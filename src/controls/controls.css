@@ -21,9 +21,6 @@
 .controls-guide.is-circle {
   opacity: 0.55;
 }
-.controls-guide.is-slice {
-  opacity: 0.3;
-}
 .controls-guide.is-radius {
   stroke: #8a8a8a;
   opacity: 0.9;
@@ -57,6 +54,12 @@
   stroke-linecap: round;
   pointer-events: stroke;
   touch-action: none;
+}
+/* Fatter grab strokes for fingers. */
+@media (pointer: coarse) {
+  .controls-hit {
+    stroke-width: 44;
+  }
 }
 .controls-hit.is-l {
   cursor: ns-resize;

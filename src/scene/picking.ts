@@ -8,6 +8,7 @@ export const POINT_RADIUS = 0.035;
 /** Extra pixels around a point that still count as a hit, and the minimum hit radius. */
 const HIT_PADDING = 5;
 const MIN_HIT_RADIUS = 11;
+const MIN_HIT_RADIUS_TOUCH = 22;
 
 const tmp = new Vector3();
 
@@ -17,9 +18,15 @@ const tmp = new Vector3();
  * screen space. A direct hit on the nearest sphere wins; otherwise the closest point
  * within the padded radius.
  */
-export function pickSwatch(view: View, scales: Scale[], sx: number, sy: number): Selection {
+export function pickSwatch(
+  view: View,
+  scales: Scale[],
+  sx: number,
+  sy: number,
+  touch = false,
+): Selection {
   const radius = POINT_RADIUS * view.camera.zoom;
-  const hitRadius = Math.max(radius + HIT_PADDING, MIN_HIT_RADIUS);
+  const hitRadius = Math.max(radius + HIT_PADDING, touch ? MIN_HIT_RADIUS_TOUCH : MIN_HIT_RADIUS);
   let best: Selection = null;
   let bestScore = Infinity;
   for (const scale of scales) {

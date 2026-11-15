@@ -5,14 +5,24 @@ import { BackSide, CylinderGeometry, FrontSide, ShaderMaterial, type Side } from
 import { HEIGHT, R, polar, type Vec3 } from '../lib/space';
 import { selectedSwatch, useStore } from '../store';
 
-const OPACITY_IDLE = 0.22;
-const OPACITY_SELECTED = 0.07;
+const OPACITY_IDLE = 0.34;
+const OPACITY_SELECTED = 0.09;
+/**
+ * Relative strength of each surface. The far wall carries the colour; the near wall and
+ * the caps are much fainter, so opposite hues (and the white and black caps) do not
+ * blend into mud in front of it.
+ */
+const FAR_WALL = 1;
+const NEAR_WALL = 0.28;
+const CAP = 0.3;
 const FADE_SECONDS = 0.2;
 
 const vertexShader = /* glsl */ `
   varying vec3 vPos;
+  varying float vCap;
   void main() {
     vPos = position;
+    vCap = abs(normal.y);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
@@ -24,7 +34,10 @@ const fragmentShader = /* glsl */ `
   uniform float uOpacity;
   uniform float uRadius;
   uniform float uHeight;
+  uniform float uWall;
+  uniform float uCap;
   varying vec3 vPos;
+  varying float vCap;
 
   float channel(float n, float h, float a, float l) {
     float k = mod(n + h * 12.0, 12.0);
@@ -41,7 +54,7 @@ const fragmentShader = /* glsl */ `
     float l = clamp(vPos.y / uHeight + 0.5, 0.0, 1.0);
     float a = s * min(l, 1.0 - l);
     vec3 rgb = vec3(channel(0.0, h, a, l), channel(8.0, h, a, l), channel(4.0, h, a, l));
-    gl_FragColor = vec4(srgbToLinear(clamp(rgb, 0.0, 1.0)), uOpacity);
+    gl_FragColor = vec4(srgbToLinear(clamp(rgb, 0.0, 1.0)), uOpacity * mix(uWall, uCap, step(0.5, vCap)));
     #include <colorspace_fragment>
   }
 `;
@@ -54,17 +67,23 @@ const fragmentShader = /* glsl */ `
 export function Shell() {
   const [inner, outer, uOpacity] = useMemo(() => {
     const uOpacity = { value: OPACITY_IDLE };
-    const make = (side: Side) =>
+    const make = (side: Side, wall: number) =>
       new ShaderMaterial({
         vertexShader,
         fragmentShader,
-        uniforms: { uOpacity, uRadius: { value: R }, uHeight: { value: HEIGHT } },
+        uniforms: {
+          uOpacity,
+          uRadius: { value: R },
+          uHeight: { value: HEIGHT },
+          uWall: { value: wall },
+          uCap: { value: CAP },
+        },
         transparent: true,
         side,
         depthWrite: false,
         toneMapped: false,
       });
-    return [make(BackSide), make(FrontSide), uOpacity] as const;
+    return [make(BackSide, FAR_WALL), make(FrontSide, NEAR_WALL), uOpacity] as const;
   }, []);
   const geometry = useMemo(() => new CylinderGeometry(R, R, HEIGHT, 128, 1, false), []);
 
