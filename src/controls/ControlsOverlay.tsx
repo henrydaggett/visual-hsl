@@ -197,7 +197,8 @@ export function ControlsOverlay() {
         const p = at(f, polar(h, rr, y));
         const half = TICK_SELECTED / 2;
         setLine(hSelected.current!, p.x, p.y - half, p.x, p.y + half);
-        hSelected.current!.setAttribute('stroke-opacity', String(opacity(h)));
+        // Dimmed less than its neighbours: it has to stay findable on the far side.
+        hSelected.current!.setAttribute('stroke-opacity', String(Math.max(opacity(h), 0.6)));
         // Label on the outside of the ring, away from its centre.
         const out = Math.hypot(p.x - axis.x, p.y - axis.y) || 1;
         setText(
@@ -268,17 +269,25 @@ export function ControlsOverlay() {
         return (d * 180) / Math.PI;
       }
       // Ring nearly edge-on: the plane intersection is unstable, so follow the on-screen
-      // tangent of the ring at the current hue instead (pixels per degree).
+      // tangent of the ring at the current hue instead. Taken in ~1px steps because the
+      // tangent turns quickly near the ends of the flattened ring; without that a fast
+      // move overshoots the end and the hue jumps back and forth.
       const rr = ringRadius(f);
-      const p0 = at(f, polar(hue - 0.5, rr, y));
-      const p1 = at(f, polar(hue + 0.5, rr, y));
-      const tx = p1.x - p0.x;
-      const ty = p1.y - p0.y;
-      const perDegree = Math.hypot(tx, ty);
-      const ux = perDegree > 1e-6 ? tx / perDegree : 1;
-      const uy = perDegree > 1e-6 ? ty / perDegree : 0;
-      const along = (b.x - a.x) * ux + (b.y - a.y) * uy;
-      return along / Math.max(perDegree, (MIN_DRAG_PX * Math.PI) / 180);
+      const steps = Math.min(200, Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y))));
+      const mx = (b.x - a.x) / steps;
+      const my = (b.y - a.y) / steps;
+      let moved = 0;
+      for (let i = 0; i < steps; i++) {
+        const p0 = at(f, polar(hue + moved - 0.5, rr, y));
+        const p1 = at(f, polar(hue + moved + 0.5, rr, y));
+        const tx = p1.x - p0.x;
+        const ty = p1.y - p0.y;
+        const perDegree = Math.hypot(tx, ty);
+        if (perDegree < 1e-6) continue;
+        const along = (mx * tx + my * ty) / perDegree;
+        moved += along / Math.max(perDegree, (MIN_DRAG_PX * Math.PI) / 180);
+      }
+      return moved;
     }
 
     function onMove(e: PointerEvent) {
