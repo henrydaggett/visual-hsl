@@ -47,10 +47,10 @@
   dominant-baseline: central;
 }
 
-/* Invisible 24px-wide grab strokes. The only parts of the overlay that take the pointer. */
+/* Invisible 32px-wide grab strokes. The only parts of the overlay that take the pointer. */
 .controls-hit {
   stroke: transparent;
-  stroke-width: 24;
+  stroke-width: 32;
   stroke-linecap: round;
   pointer-events: stroke;
   touch-action: none;
@@ -58,7 +58,7 @@
 /* Fatter grab strokes for fingers. */
 @media (pointer: coarse) {
   .controls-hit {
-    stroke-width: 44;
+    stroke-width: 56;
   }
 }
 .controls-hit.is-l {

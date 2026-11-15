@@ -16,8 +16,8 @@ import { POINT_RADIUS } from './picking';
 const sphere = new SphereGeometry(1, 32, 20);
 const OUTLINE_COLOR = new Color().setRGB(0.1, 0.1, 0.1, SRGBColorSpace);
 /** Outline widths in screen pixels, whatever the zoom. */
-const OUTLINE_PX = 1;
-const OUTLINE_SELECTED_PX = 2.5;
+const OUTLINE_PX = 0.6;
+const OUTLINE_SELECTED_PX = 1.5;
 /** Opacity of the other points while one is selected. */
 const DIMMED = 0.22;
 const FADE_SECONDS = 0.2;

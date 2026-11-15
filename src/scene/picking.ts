@@ -7,8 +7,8 @@ import type { View } from './projection';
 export const POINT_RADIUS = 0.035;
 /** Extra pixels around a point that still count as a hit, and the minimum hit radius. */
 const HIT_PADDING = 5;
-const MIN_HIT_RADIUS = 11;
-const MIN_HIT_RADIUS_TOUCH = 22;
+const MIN_HIT_RADIUS = 14;
+const MIN_HIT_RADIUS_TOUCH = 28;
 
 const tmp = new Vector3();
 

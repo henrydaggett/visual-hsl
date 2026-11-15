@@ -1,7 +1,7 @@
 /** Shared tick style and a pooled set of <line> elements, written imperatively per frame. */
 
-export const TICK = 8;
-export const TICK_SELECTED = 20;
+export const TICK = 11;
+export const TICK_SELECTED = 26;
 /** Neighbouring ticks ease towards the selected style over this many pixels. */
 const BUMP_PX = 36;
 /** Ordinary ticks closer than this (px) to the selected tick are dropped, so it stays clean. */

@@ -160,7 +160,7 @@ export function ControlsOverlay() {
         // Centred left of the ruler line so a strip stays free of the hue ring, which
         // touches the ruler at the selected lightness. The pad keeps it grabbable when the
         // view is top-down and the ruler has no height.
-        setLine(lHit.current!, x - 12, top - 6, x - 12, bottom + 6);
+        setLine(lHit.current!, x - 16, top - 6, x - 16, bottom + 6);
       }
 
       // Hue: ring 24px outside the cylinder at the selected height; every tick vertical.
