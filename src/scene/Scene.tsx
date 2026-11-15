@@ -1,7 +1,7 @@
 import { Canvas } from '@react-three/fiber';
 import { Points } from './Points';
 import { CAMERA_DISTANCE, DEFAULT_AZIMUTH, DEFAULT_ELEVATION, Rig } from './Rig';
-import { Rims, Shell } from './Shell';
+import { Rims, Shell, Slice } from './Shell';
 
 const cameraPosition: [number, number, number] = [
   CAMERA_DISTANCE * Math.cos(DEFAULT_ELEVATION) * Math.cos(DEFAULT_AZIMUTH),
@@ -22,6 +22,7 @@ export function Scene({ stage }: { stage: HTMLElement }) {
     >
       <Rig stage={stage} />
       <Shell />
+      <Slice />
       <Rims />
       <Points />
     </Canvas>

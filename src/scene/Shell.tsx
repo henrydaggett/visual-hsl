@@ -1,111 +1,203 @@
 import { Line } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { useMemo } from 'react';
-import { BackSide, CylinderGeometry, FrontSide, ShaderMaterial, type Side } from 'three';
-import { HEIGHT, R, polar, type Vec3 } from '../lib/space';
+import { useMemo, useRef } from 'react';
+import {
+  BackSide,
+  CircleGeometry,
+  CylinderGeometry,
+  DoubleSide,
+  type Mesh,
+  ShaderMaterial,
+  Vector3,
+} from 'three';
+import { HEIGHT, R, lightnessToY, polar, type Vec3 } from '../lib/space';
 import { selectedSwatch, useStore } from '../store';
 
-const OPACITY_IDLE = 0.34;
-const OPACITY_SELECTED = 0.09;
-/**
- * Relative strength of each surface. The far wall carries the colour; the near wall and
- * the caps are much fainter, so opposite hues (and the white and black caps) do not
- * blend into mud in front of it.
- */
-const FAR_WALL = 1;
-const NEAR_WALL = 0.28;
-const CAP = 0.3;
+/** Fog density per world unit of depth: idle, and while a colour is selected. */
+const DENSITY_IDLE = 0.62;
+const DENSITY_SELECTED = 0.16;
+const SLICE_OPACITY = 0.42;
 const FADE_SECONDS = 0.2;
 
 const vertexShader = /* glsl */ `
   varying vec3 vPos;
-  varying float vCap;
   void main() {
     vPos = position;
-    vCap = abs(normal.y);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
 // Hue from the angle about Y (x = r cos θ, z = r sin θ, as in space.ts), saturation from
-// the distance to the axis, lightness from the height. The HSL→RGB result is sRGB, so it
-// is converted to linear before three's output conversion turns it back into sRGB.
-const fragmentShader = /* glsl */ `
-  uniform float uOpacity;
+// the distance to the axis, lightness from the height. The result is sRGB.
+const hslChunk = /* glsl */ `
   uniform float uRadius;
   uniform float uHeight;
-  uniform float uWall;
-  uniform float uCap;
-  varying vec3 vPos;
-  varying float vCap;
 
   float channel(float n, float h, float a, float l) {
     float k = mod(n + h * 12.0, 12.0);
     return l - a * max(-1.0, min(min(k - 3.0, 9.0 - k), 1.0));
   }
 
+  // rgb in xyz, chroma (0 for greys, 1 for the pure hues) in w.
+  vec4 colourAt(vec3 p) {
+    float h = fract(atan(p.z, p.x) / 6.283185307179586);
+    float s = clamp(length(p.xz) / uRadius, 0.0, 1.0);
+    float l = clamp(p.y / uHeight + 0.5, 0.0, 1.0);
+    float a = s * min(l, 1.0 - l);
+    vec3 rgb = vec3(channel(0.0, h, a, l), channel(8.0, h, a, l), channel(4.0, h, a, l));
+    return vec4(clamp(rgb, 0.0, 1.0), 2.0 * a);
+  }
+
+  // The colours are sRGB; three's output conversion expects linear.
   vec3 srgbToLinear(vec3 c) {
     return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
   }
+`;
+
+// The volume. Only back faces are drawn, so each pixel gets one fragment at the point
+// where its view ray leaves the cylinder. From there the ray is traced back towards the
+// camera to where it entered, and the colours along it are composited front to back.
+// Greys, black and white are thinner than saturated colours, so the cylinder reads as
+// full of colour rather than full of mud.
+const volumeFragment = /* glsl */ `
+  uniform float uDensity;
+  uniform vec3 uToCamera;
+  varying vec3 vPos;
+  ${hslChunk}
+
+  const int STEPS = 40;
 
   void main() {
-    float h = fract(atan(vPos.z, vPos.x) / 6.283185307179586);
-    float s = clamp(length(vPos.xz) / uRadius, 0.0, 1.0);
-    float l = clamp(vPos.y / uHeight + 0.5, 0.0, 1.0);
-    float a = s * min(l, 1.0 - l);
-    vec3 rgb = vec3(channel(0.0, h, a, l), channel(8.0, h, a, l), channel(4.0, h, a, l));
-    gl_FragColor = vec4(srgbToLinear(clamp(rgb, 0.0, 1.0)), uOpacity * mix(uWall, uCap, step(0.5, vCap)));
+    vec3 d = uToCamera;
+    // Distance back along the ray to where it entered: the wall or a cap, whichever
+    // comes first.
+    float t = 1e6;
+    float a = dot(d.xz, d.xz);
+    if (a > 1e-8) {
+      float b = dot(vPos.xz, d.xz);
+      float c = dot(vPos.xz, vPos.xz) - uRadius * uRadius;
+      t = (-b + sqrt(max(b * b - a * c, 0.0))) / a;
+    }
+    if (d.y > 1e-6) t = min(t, (0.5 * uHeight - vPos.y) / d.y);
+    if (d.y < -1e-6) t = min(t, (-0.5 * uHeight - vPos.y) / d.y);
+    t = max(t, 0.0);
+
+    float dt = t / float(STEPS);
+    // Jitter the sample positions per pixel so the steps do not show as bands.
+    float jitter = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    vec3 colour = vec3(0.0);
+    float alpha = 0.0;
+    for (int i = 0; i < STEPS; i++) {
+      vec3 p = vPos + d * (t - (float(i) + jitter) * dt);
+      vec4 c = colourAt(p);
+      float sa = 1.0 - exp(-uDensity * (0.12 + 0.88 * c.w) * dt);
+      colour += (1.0 - alpha) * sa * c.rgb;
+      alpha += (1.0 - alpha) * sa;
+    }
+    gl_FragColor = vec4(srgbToLinear(colour / max(alpha, 1e-4)), alpha);
     #include <colorspace_fragment>
   }
 `;
 
-/**
- * The translucent HSL cylinder: side wall plus caps, coloured per fragment. Drawn as two
- * passes over one geometry, inside faces first and then outside faces, so the blending
- * order is the same everywhere (a single double-sided pass leaves a visible seam).
- */
+const sliceFragment = /* glsl */ `
+  uniform float uOpacity;
+  varying vec3 vPos;
+  ${hslChunk}
+
+  void main() {
+    gl_FragColor = vec4(srgbToLinear(colourAt(vPos).rgb), uOpacity);
+    #include <colorspace_fragment>
+  }
+`;
+
+const approach = (value: number, target: number, range: number, delta: number) => {
+  const step = (range / FADE_SECONDS) * Math.min(delta, 0.1);
+  return value + Math.max(-step, Math.min(step, target - value));
+};
+
+/** The HSL cylinder as a translucent volume of colour. */
 export function Shell() {
-  const [inner, outer, uOpacity] = useMemo(() => {
-    const uOpacity = { value: OPACITY_IDLE };
-    const make = (side: Side, wall: number) =>
+  const material = useMemo(
+    () =>
       new ShaderMaterial({
         vertexShader,
-        fragmentShader,
+        fragmentShader: volumeFragment,
         uniforms: {
-          uOpacity,
+          uDensity: { value: DENSITY_IDLE },
+          uToCamera: { value: new Vector3(0, 0, 1) },
           uRadius: { value: R },
           uHeight: { value: HEIGHT },
-          uWall: { value: wall },
-          uCap: { value: CAP },
         },
         transparent: true,
-        side,
+        side: BackSide,
         depthWrite: false,
+        depthTest: false,
         toneMapped: false,
-      });
-    return [make(BackSide, FAR_WALL), make(FrontSide, NEAR_WALL), uOpacity] as const;
-  }, []);
+      }),
+    [],
+  );
   const geometry = useMemo(() => new CylinderGeometry(R, R, HEIGHT, 128, 1, false), []);
 
-  useFrame((_, delta) => {
-    const target = selectedSwatch(useStore.getState()) ? OPACITY_SELECTED : OPACITY_IDLE;
-    const step = ((OPACITY_IDLE - OPACITY_SELECTED) / FADE_SECONDS) * Math.min(delta, 0.1);
-    uOpacity.value += Math.max(-step, Math.min(step, target - uOpacity.value));
+  useFrame(({ camera }, delta) => {
+    const u = material.uniforms;
+    const target = selectedSwatch(useStore.getState()) ? DENSITY_SELECTED : DENSITY_IDLE;
+    u.uDensity.value = approach(u.uDensity.value, target, DENSITY_IDLE - DENSITY_SELECTED, delta);
+    // Orthographic: every view ray is parallel, pointing from the scene to the camera.
+    camera.getWorldDirection(u.uToCamera.value).negate();
   });
 
-  return (
-    <>
-      <mesh geometry={geometry} material={inner} renderOrder={0} />
-      <mesh geometry={geometry} material={outer} renderOrder={1} />
-    </>
+  return <mesh geometry={geometry} material={material} renderOrder={0} />;
+}
+
+/**
+ * While a colour is selected: the cross-section of the cylinder at its lightness, filled
+ * with the real hue and saturation wheel for that level.
+ */
+export function Slice() {
+  const mesh = useRef<Mesh>(null);
+  const material = useMemo(
+    () =>
+      new ShaderMaterial({
+        vertexShader: /* glsl */ `
+          varying vec3 vPos;
+          void main() {
+            // World position, so the colour follows the disc's height.
+            vPos = (modelMatrix * vec4(position, 1.0)).xyz;
+            gl_Position = projectionMatrix * viewMatrix * vec4(vPos, 1.0);
+          }
+        `,
+        fragmentShader: sliceFragment,
+        uniforms: {
+          uOpacity: { value: 0 },
+          uRadius: { value: R },
+          uHeight: { value: HEIGHT },
+        },
+        transparent: true,
+        side: DoubleSide,
+        depthWrite: false,
+        depthTest: false,
+        toneMapped: false,
+      }),
+    [],
   );
+  const geometry = useMemo(() => new CircleGeometry(R, 128).rotateX(-Math.PI / 2), []);
+
+  useFrame((_, delta) => {
+    const swatch = selectedSwatch(useStore.getState());
+    const u = material.uniforms.uOpacity;
+    u.value = approach(u.value, swatch ? SLICE_OPACITY : 0, SLICE_OPACITY, delta);
+    if (!mesh.current) return;
+    if (swatch) mesh.current.position.y = lightnessToY(swatch.hsl.l);
+    mesh.current.visible = u.value > 0.001;
+  });
+
+  return <mesh ref={mesh} geometry={geometry} material={material} renderOrder={1} visible={false} />;
 }
 
 const ring = (y: number): Vec3[] =>
   Array.from({ length: 181 }, (_, i) => polar(i * 2, R, y));
 
-/** Thin grey rings at the rims so the shape reads even when the shell is nearly gone.
- *  Drawn after the shell so the dark bottom cap does not swallow the lower one. */
+/** Thin grey rings at the rims so the shape reads even when the volume is nearly gone. */
 export function Rims() {
   const top = useMemo(() => ring(HEIGHT / 2), []);
   const bottom = useMemo(() => ring(-HEIGHT / 2), []);
