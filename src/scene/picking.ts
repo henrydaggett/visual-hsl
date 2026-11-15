@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import { hslToPosition } from '../lib/space';
+import type { SpaceId } from '../lib/spaces';
 import type { Scale, Selection } from '../store';
 import type { View } from './projection';
 
@@ -21,6 +22,7 @@ const tmp = new Vector3();
 export function pickSwatch(
   view: View,
   scales: Scale[],
+  space: SpaceId,
   sx: number,
   sy: number,
   touch = false,
@@ -31,7 +33,7 @@ export function pickSwatch(
   let bestScore = Infinity;
   for (const scale of scales) {
     for (const swatch of scale.swatches) {
-      const [x, y, z] = hslToPosition(swatch.hsl);
+      const [x, y, z] = hslToPosition(swatch.hsl, space);
       tmp.set(x, y, z).project(view.camera);
       const px = ((tmp.x + 1) / 2) * view.width;
       const py = ((1 - tmp.y) / 2) * view.height;

@@ -101,7 +101,8 @@ export function Rig({ stage }: { stage: HTMLElement }) {
       const view = getView();
       if (!view) return null;
       const p = local(e);
-      return pickSwatch(view, useStore.getState().scales, p.x, p.y, e.pointerType === 'touch');
+      const { scales, space } = useStore.getState();
+      return pickSwatch(view, scales, space, p.x, p.y, e.pointerType === 'touch');
     };
 
     const onDown = (e: PointerEvent) => {

@@ -109,3 +109,46 @@ body {
     color: var(--ink-soft);
   }
 }
+
+.space-picker {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(16px, env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.space-picker select {
+  appearance: none;
+  min-width: 112px;
+  height: 32px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.7)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23777' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    no-repeat right 10px center;
+  color: var(--ink);
+  font: 13px var(--font);
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.space-picker select:focus-visible {
+  outline: 2px solid var(--ink-soft);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .space-picker select {
+    height: 44px;
+    font-size: 16px;
+  }
+}

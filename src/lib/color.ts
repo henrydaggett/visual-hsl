@@ -1,4 +1,7 @@
-/** h 0–359, s and l 0–100. Whole numbers. HSL is the source of truth; hex is derived. */
+/**
+ * h 0–359, s and l 0–100. Whole numbers. These three numbers are the source of truth for a
+ * colour and hex is derived. They are read in the current colour space (see spaces.ts).
+ */
 export type HSL = { h: number; s: number; l: number };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -38,18 +41,20 @@ export function formatHsl({ h, s, l }: HSL): string {
   return `hsl(${h}, ${s}%, ${l}%)`;
 }
 
-/**
- * Parses a 3- or 6-digit hex (optional "#") into whole-number HSL, or null if invalid.
- * Greys have no hue, and black/white have no saturation either, so those components
- * are taken from `previous` (the swatch being edited) instead of collapsing to 0.
- */
-export function parseHex(text: string, previous?: HSL): HSL | null {
+/** sRGB channels (0–1) for a 3- or 6-digit hex (optional "#"), or null if invalid. */
+export function parseHexRgb(text: string): [number, number, number] | null {
   const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(text.trim());
   if (!m) return null;
   const hex = m[1].length === 3 ? m[1].replace(/./g, '$&$&') : m[1];
-  const r = parseInt(hex.slice(0, 2), 16) / 255;
-  const g = parseInt(hex.slice(2, 4), 16) / 255;
-  const b = parseInt(hex.slice(4, 6), 16) / 255;
+  return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [number, number, number];
+}
+
+/**
+ * Whole-number HSL for sRGB channels in 0–1. Greys have no hue, and black/white have no
+ * saturation either, so those components are taken from `previous` (the swatch being
+ * edited) instead of collapsing to 0.
+ */
+export function rgbToHsl(r: number, g: number, b: number, previous?: HSL): HSL {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const d = max - min;
@@ -68,4 +73,10 @@ export function parseHex(text: string, previous?: HSL): HSL | null {
   else if (max === g) h = (b - r) / d + 2;
   else h = (r - g) / d + 4;
   return normalizeHsl({ h: h * 60, s: s * 100, l: l * 100 });
+}
+
+/** Parses a hex into whole-number HSL, or null if invalid. See `rgbToHsl` for greys. */
+export function parseHex(text: string, previous?: HSL): HSL | null {
+  const rgb = parseHexRgb(text);
+  return rgb ? rgbToHsl(...rgb, previous) : null;
 }

@@ -294,3 +294,8 @@ its own frame loop. D can develop against a fixed mock camera until B lands.
   than greys) instead of a surface shell, with vertical side lines on the silhouette.
   While a colour is selected the fog thins and the disc at its lightness is filled with
   that level's hue and saturation wheel.
+- **Colour spaces.** A selector (top left) switches between HSL and HSLuv. A swatch's three
+  numbers are read in the current space (`src/lib/spaces.ts`); switching re-expresses every
+  swatch so it keeps its colour, and switching back restores the original numbers exactly
+  for any swatch that was not edited in between. In HSLuv the radius is CIELUV chroma, so
+  the colours form a lumpy solid inside the cylinder and saturation 100 is the gamut edge.

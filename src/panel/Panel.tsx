@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { formatHsl, hslToHex } from '../lib/color';
+import { formatIn, toHex } from '../lib/spaces';
 import { MAX_SWATCHES, type Scale, type Swatch, useStore } from '../store';
 import './panel.css';
 
@@ -99,7 +99,8 @@ function SwatchRow({
 }) {
   const select = useStore((s) => s.select);
   const removeSwatch = useStore((s) => s.removeSwatch);
-  const hex = hslToHex(swatch.hsl);
+  const space = useStore((s) => s.space);
+  const hex = toHex(space, swatch.hsl);
   const rowRef = useRef<HTMLLIElement>(null);
   const pick = () => select({ scaleId, swatchId: swatch.id });
 
@@ -126,7 +127,7 @@ function SwatchRow({
       />
       <div className="swatch-meta">
         <HexField scaleId={scaleId} swatchId={swatch.id} hex={hex} index={index} onFocus={pick} />
-        <span className="swatch-hsl">{formatHsl(swatch.hsl)}</span>
+        <span className="swatch-hsl">{formatIn(space, swatch.hsl)}</span>
       </div>
       <button
         type="button"

@@ -8,7 +8,8 @@ import {
   SRGBColorSpace,
   SphereGeometry,
 } from 'three';
-import { type HSL, hslToRgb } from '../lib/color';
+import type { HSL } from '../lib/color';
+import { type SpaceId, toRgb } from '../lib/spaces';
 import { hslToPosition } from '../lib/space';
 import { useStore } from '../store';
 import { POINT_RADIUS } from './picking';
@@ -27,15 +28,25 @@ const FADE_SECONDS = 0.2;
  * back-face hull that reads as an outline. Both are flagged transparent only so they draw
  * after the shell (which never writes depth) and are not tinted by it.
  */
-function Point({ hsl, selected, dimmed }: { hsl: HSL; selected: boolean; dimmed: boolean }) {
+function Point({
+  hsl,
+  space,
+  selected,
+  dimmed,
+}: {
+  hsl: HSL;
+  space: SpaceId;
+  selected: boolean;
+  dimmed: boolean;
+}) {
   const outline = useRef<Mesh>(null);
   const fill = useRef<Mesh>(null);
   const opacity = useRef(dimmed ? DIMMED : 1);
   const { h, s, l } = hsl;
   const color = useMemo(() => {
-    const [r, g, b] = hslToRgb({ h, s, l });
+    const [r, g, b] = toRgb(space, { h, s, l });
     return new Color().setRGB(r, g, b, SRGBColorSpace);
-  }, [h, s, l]);
+  }, [space, h, s, l]);
 
   useFrame(({ camera }, delta) => {
     const px = selected ? OUTLINE_SELECTED_PX : OUTLINE_PX;
@@ -48,7 +59,7 @@ function Point({ hsl, selected, dimmed }: { hsl: HSL; selected: boolean; dimmed:
   });
 
   return (
-    <group position={hslToPosition(hsl)}>
+    <group position={hslToPosition(hsl, space)}>
       {/* Fill first, so its depth hides the hull behind it and a faded point shows the
           page through its fill rather than the dark hull. */}
       <mesh ref={fill} geometry={sphere} scale={POINT_RADIUS} renderOrder={3}>
@@ -65,6 +76,7 @@ function Point({ hsl, selected, dimmed }: { hsl: HSL; selected: boolean; dimmed:
 export function Points() {
   const scales = useStore((s) => s.scales);
   const selection = useStore((s) => s.selection);
+  const space = useStore((s) => s.space);
   return (
     <>
       {scales.map((scale) =>
@@ -72,6 +84,7 @@ export function Points() {
           <Point
             key={swatch.id}
             hsl={swatch.hsl}
+            space={space}
             selected={selection?.scaleId === scale.id && selection.swatchId === swatch.id}
             dimmed={selection !== null && selection.swatchId !== swatch.id}
           />

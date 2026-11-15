@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Vector3 } from 'three';
-import { HEIGHT, R, type Vec3, lightnessToY, polar } from '../lib/space';
+import { HEIGHT, R, type Vec3, lightnessToY, polar, reachRadius } from '../lib/space';
 import {
   type View,
   getView,
@@ -25,6 +25,8 @@ import './controls.css';
 
 /** Screen gap between the cylinder and the lightness ruler / hue ring. */
 const GAP = 24;
+/** Gap between the saturation scale and the line it measures. */
+const SAT_GAP = 20;
 /** The lightness ruler sits this much further out, clear of the hue ring. */
 const RULER_EXTRA = 8;
 /** Smallest on-screen length used as a drag divisor, so foreshortened controls stay usable. */
@@ -150,7 +152,8 @@ export function ControlsOverlay() {
       const yTop = lightnessToY(100);
       const yBottom = lightnessToY(0);
       const axis = at(f, [0, y, 0]);
-      const wall = at(f, polar(h, R, y));
+      // Where saturation 100 lies: the cylinder wall in HSL, the gamut edge in HSLuv.
+      const wall = at(f, polar(h, reachRadius(useStore.getState().space, h, l), y));
 
       // Guide: the cross-section circle at the selected lightness.
       const spanX = Math.hypot(f.ex.x, f.ez.x);
@@ -247,17 +250,17 @@ export function ControlsOverlay() {
           if (!style) continue;
           const bx = axis.x + (dx * v) / 100;
           const by = axis.y + (dy * v) / 100;
-          pool.add(bx, by - GAP, bx, by - GAP - style.length, style.stroke, tickWeight(v, perUnit));
+          pool.add(bx, by - SAT_GAP, bx, by - SAT_GAP - style.length, style.stroke, tickWeight(v, perUnit));
         }
         pool.end();
         const bx = axis.x + (dx * s) / 100;
         const by = axis.y + (dy * s) / 100;
-        setLine(sSelected.current!, bx, by - GAP, bx, by - GAP - TICK_SELECTED);
-        setText(sLabel.current!, bx, by - GAP - TICK_SELECTED - 9, String(s));
+        setLine(sSelected.current!, bx, by - SAT_GAP, bx, by - SAT_GAP - TICK_SELECTED);
+        setText(sLabel.current!, bx, by - SAT_GAP - TICK_SELECTED - 9, String(s));
         // When the radius points at the camera, keep a grabbable stub around it.
         // The grab stroke follows the ticks, not the line.
         const pad = Math.max(0, (GAP - length) / 2);
-        const lift = GAP + TICK / 2;
+        const lift = SAT_GAP + TICK / 2;
         setLine(
           sHit.current!,
           axis.x - sDir.x * pad,
@@ -334,7 +337,10 @@ export function ControlsOverlay() {
       } else if (drag.axis === 's') {
         const y = lightnessToY(swatch.hsl.l);
         const a = at(f, [0, y, 0]);
-        const w = at(f, polar(swatch.hsl.h, R, y));
+        const w = at(
+          f,
+          polar(swatch.hsl.h, reachRadius(useStore.getState().space, swatch.hsl.h, swatch.hsl.l), y),
+        );
         const length = Math.hypot(w.x - a.x, w.y - a.y);
         const along = (p.x - prev.x) * sDir.x + (p.y - prev.y) * sDir.y;
         drag.value = clamp(drag.value + (along / Math.max(length, MIN_DRAG_PX)) * 100, 0, 100);

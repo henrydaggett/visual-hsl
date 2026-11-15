@@ -11,12 +11,14 @@ import {
   ShaderMaterial,
   Vector3,
 } from 'three';
+import { KAPPA, MAX_CHROMA, REF_U, REF_V } from '../lib/hsluv';
 import { HEIGHT, R, lightnessToY, polar, type Vec3 } from '../lib/space';
 import { selectedSwatch, useStore } from '../store';
 
 /** Fog density per world unit of depth: idle, and while a colour is selected. */
 const DENSITY_IDLE = 0.95;
 const DENSITY_SELECTED = 0.45;
+const HSLUV_DENSITY = 1.7;
 const SLICE_OPACITY = 0.34;
 const FADE_SECONDS = 0.2;
 
@@ -28,30 +30,71 @@ const vertexShader = /* glsl */ `
   }
 `;
 
-// Hue from the angle about Y (x = r cos θ, z = r sin θ, as in space.ts), saturation from
-// the distance to the axis, lightness from the height. The result is sRGB.
-const hslChunk = /* glsl */ `
+// Colour of a point inside the cylinder, in the current colour space. Hue is the angle
+// about Y (x = r cos θ, z = r sin θ, as in space.ts) and lightness the height, in both
+// spaces. The distance from the axis is HSL saturation, or CIELUV chroma for HSLuv, where
+// only part of the cylinder holds real colours: anything sRGB cannot show is left empty,
+// which gives the HSLuv solid its lumpy shape. The result is sRGB.
+const colourChunk = /* glsl */ `
   uniform float uRadius;
   uniform float uHeight;
+  uniform float uSpace; // 0 = HSL, 1 = HSLuv
 
   float channel(float n, float h, float a, float l) {
     float k = mod(n + h * 12.0, 12.0);
     return l - a * max(-1.0, min(min(k - 3.0, 9.0 - k), 1.0));
   }
 
-  // rgb in xyz, chroma (0 for greys, 1 for the pure hues) in w.
-  vec4 colourAt(vec3 p) {
+  // The colours are sRGB; three's output conversion expects linear.
+  vec3 srgbToLinear(vec3 c) {
+    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+  }
+  vec3 linearToSrgb(vec3 c) {
+    return mix(12.92 * c, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+  }
+
+  // rgb in xyz; w is how colourful the point is (0 for greys, 1 for the strongest colours).
+  // inside is 1 where the space has a colour at this point, 0 where it does not.
+  vec4 colourHsl(vec3 p, out float inside) {
     float h = fract(atan(p.z, p.x) / 6.283185307179586);
     float s = clamp(length(p.xz) / uRadius, 0.0, 1.0);
     float l = clamp(p.y / uHeight + 0.5, 0.0, 1.0);
     float a = s * min(l, 1.0 - l);
     vec3 rgb = vec3(channel(0.0, h, a, l), channel(8.0, h, a, l), channel(4.0, h, a, l));
+    inside = 1.0;
     return vec4(clamp(rgb, 0.0, 1.0), 2.0 * a);
   }
 
-  // The colours are sRGB; three's output conversion expects linear.
-  vec3 srgbToLinear(vec3 c) {
-    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+  vec4 colourHsluv(vec3 p, out float inside) {
+    inside = 0.0;
+    float L = clamp(p.y / uHeight + 0.5, 0.0, 1.0) * 100.0;
+    float C = length(p.xz) / uRadius * ${MAX_CHROMA.toFixed(1)};
+    if (L < 0.05) return vec4(0.0);
+    float ang = atan(p.z, p.x);
+    // LCh(uv) -> Luv -> XYZ -> linear sRGB.
+    float varU = C * cos(ang) / (13.0 * L) + ${REF_U};
+    float varV = C * sin(ang) / (13.0 * L) + ${REF_V};
+    if (abs(varV) < 1e-4) return vec4(0.0);
+    float Y = L <= 8.0 ? L / ${KAPPA} : pow((L + 16.0) / 116.0, 3.0);
+    float X = -9.0 * Y * varU / ((varU - 4.0) * varV - varU * varV);
+    float Z = (9.0 * Y - 15.0 * varV * Y - varV * X) / (3.0 * varV);
+    vec3 lin = vec3(
+      3.240969941904521 * X - 1.537383177570093 * Y - 0.498610760293 * Z,
+      -0.96924363628087 * X + 1.87596750150772 * Y + 0.041555057407175 * Z,
+      0.055630079696993 * X - 0.20397695888897 * Y + 1.056971514242878 * Z
+    );
+    // In gamut only if every channel is within 0–1; a thin soft edge avoids stair-steps.
+    float lo = min(min(lin.r, lin.g), lin.b);
+    float hi = max(max(lin.r, lin.g), lin.b);
+    // The low side is judged relative to luminance: near black every channel is tiny, and
+    // an absolute tolerance would let the whole floor of the cylinder count as in gamut.
+    inside = smoothstep(-0.04, 0.0, lo / Y) * (1.0 - smoothstep(1.0, 1.015, hi));
+    return vec4(linearToSrgb(clamp(lin, 0.0, 1.0)), clamp(C / 95.0, 0.0, 1.0));
+  }
+
+  vec4 colourAt(vec3 p, out float inside) {
+    if (uSpace > 0.5) return colourHsluv(p, inside);
+    return colourHsl(p, inside);
   }
 `;
 
@@ -64,7 +107,7 @@ const volumeFragment = /* glsl */ `
   uniform float uDensity;
   uniform vec3 uToCamera;
   varying vec3 vPos;
-  ${hslChunk}
+  ${colourChunk}
 
   const int STEPS = 40;
 
@@ -90,8 +133,9 @@ const volumeFragment = /* glsl */ `
     float alpha = 0.0;
     for (int i = 0; i < STEPS; i++) {
       vec3 p = vPos + d * (t - (float(i) + jitter) * dt);
-      vec4 c = colourAt(p);
-      float sa = 1.0 - exp(-uDensity * (0.12 + 0.88 * c.w) * dt);
+      float inside;
+      vec4 c = colourAt(p, inside);
+      float sa = 1.0 - exp(-uDensity * inside * (0.12 + 0.88 * c.w) * dt);
       colour += (1.0 - alpha) * sa * c.rgb;
       alpha += (1.0 - alpha) * sa;
     }
@@ -103,10 +147,12 @@ const volumeFragment = /* glsl */ `
 const sliceFragment = /* glsl */ `
   uniform float uOpacity;
   varying vec3 vPos;
-  ${hslChunk}
+  ${colourChunk}
 
   void main() {
-    gl_FragColor = vec4(srgbToLinear(colourAt(vPos).rgb), uOpacity);
+    float inside;
+    vec3 rgb = colourAt(vPos, inside).rgb;
+    gl_FragColor = vec4(srgbToLinear(rgb), uOpacity * inside);
     #include <colorspace_fragment>
   }
 `;
@@ -128,6 +174,7 @@ export function Shell() {
           uToCamera: { value: new Vector3(0, 0, 1) },
           uRadius: { value: R },
           uHeight: { value: HEIGHT },
+          uSpace: { value: 0 },
         },
         transparent: true,
         side: BackSide,
@@ -141,8 +188,12 @@ export function Shell() {
 
   useFrame(({ camera }, delta) => {
     const u = material.uniforms;
-    const target = selectedSwatch(useStore.getState()) ? DENSITY_SELECTED : DENSITY_IDLE;
-    u.uDensity.value = approach(u.uDensity.value, target, DENSITY_IDLE - DENSITY_SELECTED, delta);
+    const state = useStore.getState();
+    u.uSpace.value = state.space === 'hsluv' ? 1 : 0;
+    // The HSLuv solid is smaller than the cylinder, so its fog is thicker to match.
+    const boost = state.space === 'hsluv' ? HSLUV_DENSITY : 1;
+    const target = (selectedSwatch(state) ? DENSITY_SELECTED : DENSITY_IDLE) * boost;
+    u.uDensity.value = approach(u.uDensity.value, target, DENSITY_IDLE * boost, delta);
     // Orthographic: every view ray is parallel, pointing from the scene to the camera.
     camera.getWorldDirection(u.uToCamera.value).negate();
   });
@@ -172,6 +223,7 @@ export function Slice() {
           uOpacity: { value: 0 },
           uRadius: { value: R },
           uHeight: { value: HEIGHT },
+          uSpace: { value: 0 },
         },
         transparent: true,
         side: DoubleSide,
@@ -184,7 +236,9 @@ export function Slice() {
   const geometry = useMemo(() => new CircleGeometry(R, 128).rotateX(-Math.PI / 2), []);
 
   useFrame((_, delta) => {
-    const swatch = selectedSwatch(useStore.getState());
+    const state = useStore.getState();
+    const swatch = selectedSwatch(state);
+    material.uniforms.uSpace.value = state.space === 'hsluv' ? 1 : 0;
     const u = material.uniforms.uOpacity;
     u.value = approach(u.value, swatch ? SLICE_OPACITY : 0, SLICE_OPACITY, delta);
     if (!mesh.current) return;

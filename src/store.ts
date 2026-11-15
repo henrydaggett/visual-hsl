@@ -1,8 +1,19 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { type HSL, normalizeHsl, parseHex } from './lib/color';
+import { type HSL, normalizeHsl } from './lib/color';
+import { type SpaceId, convert, fromHex, toHex } from './lib/spaces';
 
-export type Swatch = { id: string; hsl: HSL };
+export type Swatch = {
+  id: string;
+  /** Hue, saturation and lightness, read in the store's current colour space. */
+  hsl: HSL;
+  /**
+   * Set when the colour space is switched: the numbers this swatch had in the space it
+   * left, and the hex it arrived with. Switching back restores those numbers exactly if
+   * the colour was not edited in between, so toggling spaces never drifts.
+   */
+  memo?: { space: SpaceId; hsl: HSL; hex: string };
+};
 export type Scale = { id: string; name: string; swatches: Swatch[] };
 export type Selection = { scaleId: string; swatchId: string } | null;
 export type Axis = 'h' | 's' | 'l';
@@ -29,10 +40,14 @@ export const seedScales = (): Scale[] => [
 ];
 
 type State = {
+  /** The colour space every swatch's numbers are read in. */
+  space: SpaceId;
   scales: Scale[];
   selection: Selection;
   /** Which axis control is being dragged. Orbit is disabled while this is set. */
   dragging: Axis | null;
+  /** Switches colour space, re-expressing every swatch so it keeps its colour. */
+  setSpace: (space: SpaceId) => void;
   select: (selection: Selection) => void;
   setDragging: (axis: Axis | null) => void;
   /** Duplicates the selected swatch (or the last one), nudges lightness, selects it. */
@@ -64,9 +79,27 @@ const mapSwatch = (
 export const useStore = create<State>()(
   persist(
     (set, get) => ({
+      space: 'hsl',
       scales: seedScales(),
       selection: null,
       dragging: null,
+
+      setSpace: (next) => {
+        const { space, scales } = get();
+        if (next === space) return;
+        set({
+          space: next,
+          scales: scales.map((sc) => ({
+            ...sc,
+            swatches: sc.swatches.map((sw) => {
+              const back =
+                sw.memo?.space === next && sw.memo.hex === toHex(space, sw.hsl) ? sw.memo.hsl : null;
+              const hsl = back ?? convert(space, next, sw.hsl);
+              return { id: sw.id, hsl, memo: { space, hsl: sw.hsl, hex: toHex(next, hsl) } };
+            }),
+          })),
+        });
+      },
 
       select: (selection) => set({ selection }),
       setDragging: (dragging) => set({ dragging }),
@@ -123,12 +156,12 @@ export const useStore = create<State>()(
       },
 
       setHex: (scaleId, swatchId, text) => {
-        const { scales } = get();
+        const { scales, space } = get();
         const current = scales
           .find((sc) => sc.id === scaleId)
           ?.swatches.find((sw) => sw.id === swatchId);
         if (!current) return false;
-        const next = parseHex(text, current.hsl);
+        const next = fromHex(space, text, current.hsl);
         if (!next) return false;
         set({ scales: mapSwatch(scales, scaleId, swatchId, () => next) });
         return true;
@@ -136,7 +169,7 @@ export const useStore = create<State>()(
     }),
     {
       name: 'visual-hsl:v1',
-      partialize: (state) => ({ scales: state.scales }),
+      partialize: (state) => ({ scales: state.scales, space: state.space }),
     },
   ),
 );

@@ -1,4 +1,5 @@
 import type { HSL } from './color';
+import { type SpaceId, spaceOf } from './spaces';
 
 /**
  * The one place that maps HSL onto the cylinder. World units, Y up, cylinder centred
@@ -21,6 +22,9 @@ export function polar(h: number, radius: number, y: number): Vec3 {
   return [radius * Math.cos(a), y, radius * Math.sin(a)];
 }
 
-export function hslToPosition({ h, s, l }: HSL): Vec3 {
-  return polar(h, (s / 100) * R, lightnessToY(l));
+/** World radius at which saturation 100 lies, for this hue and lightness. */
+export const reachRadius = (space: SpaceId, h: number, l: number) => spaceOf(space).reach(h, l) * R;
+
+export function hslToPosition({ h, s, l }: HSL, space: SpaceId = 'hsl'): Vec3 {
+  return polar(h, (s / 100) * reachRadius(space, h, l), lightnessToY(l));
 }

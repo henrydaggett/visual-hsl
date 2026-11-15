@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ControlsOverlay } from './controls/ControlsOverlay';
-import { formatHsl, hslToHex } from './lib/color';
+import { SPACES, type SpaceId, formatIn, toHex } from './lib/spaces';
 import { Panel } from './panel/Panel';
 import { Scene } from './scene/Scene';
 import { selectedSwatch, useStore } from './store';
@@ -15,6 +15,7 @@ export function App() {
         {stage && <Scene stage={stage} />}
         <ControlsOverlay />
       </div>
+      <SpacePicker />
       <button
         type="button"
         className="panel-toggle"
@@ -35,16 +36,35 @@ export function App() {
   );
 }
 
+/** Top left: which colour space the cylinder and every swatch's numbers are shown in. */
+function SpacePicker() {
+  const space = useStore((s) => s.space);
+  const setSpace = useStore((s) => s.setSpace);
+  return (
+    <label className="space-picker">
+      <span>Colour space</span>
+      <select value={space} onChange={(e) => setSpace(e.target.value as SpaceId)}>
+        {SPACES.map((sp) => (
+          <option key={sp.id} value={sp.id}>
+            {sp.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 /** Narrow screens only: the selected colour's values, since the panel is hidden there. */
 function Readout() {
   const swatch = useStore(selectedSwatch);
+  const space = useStore((s) => s.space);
   if (!swatch) return null;
-  const hex = hslToHex(swatch.hsl);
+  const hex = toHex(space, swatch.hsl);
   return (
     <div className="readout" aria-live="off">
       <span className="readout-chip" style={{ background: hex }} />
       <span className="readout-hex">{hex}</span>
-      <span className="readout-hsl">{formatHsl(swatch.hsl)}</span>
+      <span className="readout-hsl">{formatIn(space, swatch.hsl)}</span>
     </div>
   );
 }
