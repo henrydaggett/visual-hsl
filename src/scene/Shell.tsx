@@ -6,6 +6,7 @@ import {
   CircleGeometry,
   CylinderGeometry,
   DoubleSide,
+  type Group,
   type Mesh,
   ShaderMaterial,
   Vector3,
@@ -14,8 +15,8 @@ import { HEIGHT, R, lightnessToY, polar, type Vec3 } from '../lib/space';
 import { selectedSwatch, useStore } from '../store';
 
 /** Fog density per world unit of depth: idle, and while a colour is selected. */
-const DENSITY_IDLE = 0.62;
-const DENSITY_SELECTED = 0.16;
+const DENSITY_IDLE = 0.95;
+const DENSITY_SELECTED = 0.2;
 const SLICE_OPACITY = 0.42;
 const FADE_SECONDS = 0.2;
 
@@ -197,14 +198,36 @@ export function Slice() {
 const ring = (y: number): Vec3[] =>
   Array.from({ length: 181 }, (_, i) => polar(i * 2, R, y));
 
-/** Thin grey rings at the rims so the shape reads even when the volume is nearly gone. */
+/**
+ * Thin grey outline so the shape reads even when the volume is nearly gone: rings at the
+ * rims, plus the two vertical sides of the silhouette. The sides are turned every frame to
+ * stay at the left and right edges as seen from the camera.
+ */
 export function Rims() {
   const top = useMemo(() => ring(HEIGHT / 2), []);
   const bottom = useMemo(() => ring(-HEIGHT / 2), []);
+  const sides = useRef<Group>(null);
+  const side = (x: number): Vec3[] => [
+    [x, -HEIGHT / 2, 0],
+    [x, HEIGHT / 2, 0],
+  ];
+  const direction = useMemo(() => new Vector3(), []);
+
+  useFrame(({ camera }) => {
+    camera.getWorldDirection(direction);
+    // Puts the group's x axis at right angles to the view direction.
+    if (sides.current) sides.current.rotation.y = Math.atan2(direction.x, direction.z);
+  });
+
+  const style = { color: '#9c9c9c', lineWidth: 1, toneMapped: false, transparent: true, renderOrder: 2 };
   return (
     <>
-      <Line points={top} color="#9c9c9c" lineWidth={1} toneMapped={false} transparent renderOrder={2} />
-      <Line points={bottom} color="#9c9c9c" lineWidth={1} toneMapped={false} transparent renderOrder={2} />
+      <Line points={top} {...style} />
+      <Line points={bottom} {...style} />
+      <group ref={sides}>
+        <Line points={side(-R)} {...style} />
+        <Line points={side(R)} {...style} />
+      </group>
     </>
   );
 }

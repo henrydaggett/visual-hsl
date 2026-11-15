@@ -290,3 +290,7 @@ its own frame loop. D can develop against a fixed mock camera until B lands.
 - **Guides removed.** The slice rectangle (axis line and the lines out to the wall) is
   gone. The cross-section circle and the saturation baseline remain.
 - **Other points fade** to about 22% while one is selected.
+- **Colour volume.** The cylinder is ray-marched as a volume (saturated colours denser
+  than greys) instead of a surface shell, with vertical side lines on the silhouette.
+  While a colour is selected the fog thins and the disc at its lightness is filled with
+  that level's hue and saturation wheel.
