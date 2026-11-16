@@ -18,10 +18,13 @@ import { HEIGHT, R, lightnessToY, polar, type Vec3 } from '../lib/space';
 import { selectedSwatch, useStore } from '../store';
 
 /** Fog density per world unit of depth: idle, and while a colour is selected. */
-const DENSITY_IDLE = 1.4;
-const DENSITY_SELECTED = 0.6;
-/** Saturation boost applied to the blended fog colour: 1 leaves it as it is. */
-const VIVID = 1.25;
+const DENSITY_IDLE = 1.27;
+const DENSITY_SELECTED = 0.45;
+/**
+ * Saturation boost applied to the blended fog colour while nothing is selected. 1 leaves
+ * it as it is, which is what a selected colour gets.
+ */
+const VIVID_IDLE = 1.25;
 const SLICE_OPACITY = 0.34;
 const FADE_SECONDS = 0.2;
 
@@ -148,6 +151,7 @@ const colourChunk = /* glsl */ `
 // full of colour rather than full of mud.
 const volumeFragment = /* glsl */ `
   uniform float uDensity;
+  uniform float uVivid;
   uniform vec3 uToCamera;
   varying vec3 vPos;
   ${colourChunk}
@@ -186,7 +190,7 @@ const volumeFragment = /* glsl */ `
     // its own grey to keep the fog vivid.
     vec3 fog = colour / max(alpha, 1e-4);
     float grey = dot(fog, vec3(0.299, 0.587, 0.114));
-    fog = clamp(mix(vec3(grey), fog, ${VIVID.toFixed(2)}), 0.0, 1.0);
+    fog = clamp(mix(vec3(grey), fog, uVivid), 0.0, 1.0);
     gl_FragColor = vec4(srgbToLinear(fog), alpha);
     #include <colorspace_fragment>
   }
@@ -219,6 +223,7 @@ export function Shell() {
         fragmentShader: volumeFragment,
         uniforms: {
           uDensity: { value: DENSITY_IDLE },
+          uVivid: { value: VIVID_IDLE },
           uToCamera: { value: new Vector3(0, 0, 1) },
           uRadius: { value: R },
           uHeight: { value: HEIGHT },
@@ -243,6 +248,8 @@ export function Shell() {
     const boost = space.density;
     const target = (selectedSwatch(state) ? DENSITY_SELECTED : DENSITY_IDLE) * boost;
     u.uDensity.value = approach(u.uDensity.value, target, DENSITY_IDLE * boost, delta);
+    const vivid = selectedSwatch(state) ? 1 : VIVID_IDLE;
+    u.uVivid.value = approach(u.uVivid.value, vivid, VIVID_IDLE - 1, delta);
     // Orthographic: every view ray is parallel, pointing from the scene to the camera.
     camera.getWorldDirection(u.uToCamera.value).negate();
   });
