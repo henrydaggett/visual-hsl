@@ -39,6 +39,10 @@ export const seedScales = (): Scale[] => [
   },
 ];
 
+/** What undo restores: the colours and the space their numbers are read in. */
+type Snapshot = { scales: Scale[]; space: SpaceId };
+const UNDO_LIMIT = 100;
+
 type State = {
   /** The colour space every swatch's numbers are read in. */
   space: SpaceId;
@@ -46,6 +50,10 @@ type State = {
   selection: Selection;
   /** Which axis control is being dragged. Orbit is disabled while this is set. */
   dragging: Axis | null;
+  /** Earlier states of the colours and colour space, oldest first. Not saved. */
+  past: Snapshot[];
+  /** Steps back to before the last change. A whole drag counts as one change. */
+  undo: () => void;
   /** Switches colour space, re-expressing every swatch so it keeps its colour. */
   setSpace: (space: SpaceId) => void;
   select: (selection: Selection) => void;
@@ -82,8 +90,51 @@ const mapSwatch = (
 
 export const useStore = create<State>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      /** True once the drag in progress has recorded its undo step. */
+      let dragRecorded = false;
+      /**
+       * Applies a change to the colours or the space, remembering the state before it for
+       * undo. Changes that leave everything as it was are not remembered, and a drag, which
+       * arrives as many small changes, is remembered once.
+       */
+      const record = (next: Partial<State>) => {
+        const state = get();
+        const before: Snapshot = { scales: state.scales, space: state.space };
+        const after: Snapshot = {
+          scales: next.scales ?? state.scales,
+          space: next.space ?? state.space,
+        };
+        const changed = JSON.stringify(before) !== JSON.stringify(after);
+        const remember = changed && !(state.dragging !== null && dragRecorded);
+        if (changed && state.dragging !== null) dragRecorded = true;
+        set({
+          ...next,
+          past: remember ? [...state.past, before].slice(-UNDO_LIMIT) : state.past,
+        });
+      };
+
+      return {
       space: 'hsl',
+      past: [],
+
+      undo: () => {
+        const { past, selection } = get();
+        const last = past[past.length - 1];
+        if (!last) return;
+        const exists =
+          selection &&
+          last.scales.some(
+            (sc) => sc.id === selection.scaleId && sc.swatches.some((sw) => sw.id === selection.swatchId),
+          );
+        set({
+          scales: last.scales,
+          space: last.space,
+          past: past.slice(0, -1),
+          selection: exists ? selection : null,
+        });
+      },
+
       scales: seedScales(),
       selection: null,
       dragging: null,
@@ -91,7 +142,7 @@ export const useStore = create<State>()(
       setSpace: (next) => {
         const { space, scales } = get();
         if (next === space) return;
-        set({
+        record({
           space: next,
           scales: scales.map((sc) => ({
             ...sc,
@@ -105,7 +156,10 @@ export const useStore = create<State>()(
       },
 
       select: (selection) => set({ selection }),
-      setDragging: (dragging) => set({ dragging }),
+      setDragging: (dragging) => {
+        dragRecorded = false;
+        set({ dragging });
+      },
 
       addSwatch: (scaleId) => {
         const { scales, selection } = get();
@@ -127,7 +181,7 @@ export const useStore = create<State>()(
         for (let l = base.l + 8; l <= 100; l += 8) candidates.push(l);
         const l = candidates.find((c) => !taken(c)) ?? base.l;
         const swatch: Swatch = { id: newId(), hsl: normalizeHsl({ ...base, l }) };
-        set({
+        record({
           scales: scales.map((sc) =>
             sc.id === scaleId ? { ...sc, swatches: [...sc.swatches, swatch] } : sc,
           ),
@@ -137,7 +191,7 @@ export const useStore = create<State>()(
 
       removeSwatch: (scaleId, swatchId) => {
         const { scales, selection } = get();
-        set({
+        record({
           scales: scales.map((sc) =>
             sc.id === scaleId
               ? { ...sc, swatches: sc.swatches.filter((sw) => sw.id !== swatchId) }
@@ -150,7 +204,7 @@ export const useStore = create<State>()(
       updateSelected: (patch) => {
         const { scales, selection } = get();
         if (!selection) return;
-        set({
+        record({
           scales: mapSwatch(scales, selection.scaleId, selection.swatchId, (hsl) => ({
             ...hsl,
             ...patch,
@@ -166,10 +220,11 @@ export const useStore = create<State>()(
         if (!current) return false;
         const next = fromHex(space, text, current.hsl);
         if (!next) return false;
-        set({ scales: mapSwatch(scales, scaleId, swatchId, () => next) });
+        record({ scales: mapSwatch(scales, scaleId, swatchId, () => next) });
         return true;
       },
-    }),
+      };
+    },
     {
       name: 'visual-hsl:v1',
       version: 2,

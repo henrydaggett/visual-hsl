@@ -36,11 +36,17 @@ body {
   height: 100dvh;
 }
 
-/* Wraps the canvas and the controls overlay. OrbitControls listens here. */
-.stage {
+/* The model area: everything left of the colour panel. */
+.main {
   position: relative;
   flex: 1;
   min-width: 0;
+}
+
+/* Wraps the canvas and the controls overlay. OrbitControls listens here. */
+.stage {
+  position: absolute;
+  inset: 0;
   touch-action: none;
   user-select: none;
 }
@@ -157,5 +163,37 @@ body {
   /* 16px keeps iOS from zooming the page when the picker opens. */
   .space-picker select {
     font-size: 16px;
+  }
+}
+
+/* Sits at the top right of the model area: left of the colour panel on wide screens, left
+   of the panel button on narrow ones. */
+.undo-button {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: 16px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.7);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.undo-button:focus-visible {
+  outline: 2px solid var(--ink-soft);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .undo-button {
+    right: calc(max(12px, env(safe-area-inset-right)) + 44px + 8px);
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
   }
 }

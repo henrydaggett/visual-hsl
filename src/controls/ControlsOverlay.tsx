@@ -12,6 +12,7 @@ import {
 import { effective, spaceOf } from '../lib/spaces';
 import { type Axis, selectedSwatch, useStore } from '../store';
 import {
+  OUTLINE_GREY,
   TICK,
   TICK_SELECTED,
   TickPool,
@@ -68,6 +69,14 @@ const at = (f: Frame, [x, y, z]: Vec3): Pt => ({
 });
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const UP: Pt = { x: 0, y: -1 };
+/** Unit direction `a` turned a share `t` of the way towards unit direction `b`. */
+function turn(a: Pt, b: Pt, t: number): Pt {
+  const angle = Math.atan2(a.x * b.y - a.y * b.x, a.x * b.x + a.y * b.y) * t;
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return { x: a.x * c - a.y * s, y: a.x * s + a.y * c };
+}
 const smoothstep = (a: number, b: number, v: number) => {
   const t = clamp((v - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
@@ -160,6 +169,12 @@ export function ControlsOverlay() {
       // The most saturated real colour here: the cylinder wall, or the edge of the solid.
       const wall = at(f, polar(h, reachRadius(spaceId, h, l), y));
 
+      // How close the view is to looking straight down (or up) the axis: 0 until about 25°
+      // off it, 1 within about 6°. Seen like that the ring is a circle and "vertical"
+      // means nothing, so hue ticks turn to point outward from the centre and saturation
+      // ticks turn to stand at right angles to their line.
+      const topView = smoothstep(0.906, 0.9945, Math.abs(f.dir.y));
+
       // Guide: the cross-section circle at the selected lightness.
       const spanX = Math.hypot(f.ex.x, f.ez.x);
       const spanY = Math.hypot(f.ex.y, f.ez.y);
@@ -200,6 +215,15 @@ export function ControlsOverlay() {
         };
         const opacity = (deg: number) =>
           1 - (1 - FAR_OPACITY) * smoothstep(0, 0.12, farness(deg));
+        /** Direction of the tick at ring point `p`: vertical, or outward in a top view. */
+        const tickDir = (p: Pt): Pt => {
+          if (topView <= 0) return UP;
+          const d = Math.hypot(p.x - axis.x, p.y - axis.y) || 1;
+          let out = { x: (p.x - axis.x) / d, y: (p.y - axis.y) / d };
+          // A tick is a line, not an arrow: turn towards whichever end is nearer.
+          if (out.y > 0) out = { x: -out.x, y: -out.y };
+          return turn(UP, out, topView);
+        };
         const pool = pools.h;
         pool.begin();
         for (let deg = 0; deg < 360; deg += step) {
@@ -207,11 +231,12 @@ export function ControlsOverlay() {
           if (!style) continue;
           const p = at(f, polar(deg, rr, y));
           const half = style.length / 2;
+          const u = tickDir(p);
           pool.add(
-            p.x,
-            p.y - half,
-            p.x,
-            p.y + half,
+            p.x - u.x * half,
+            p.y - u.y * half,
+            p.x + u.x * half,
+            p.y + u.y * half,
             style.stroke,
             opacity(deg) * tickWeight(deg, perDegree),
           );
@@ -219,7 +244,8 @@ export function ControlsOverlay() {
         pool.end();
         const p = at(f, polar(h, rr, y));
         const half = TICK_SELECTED / 2;
-        setLine(hSelected.current!, p.x, p.y - half, p.x, p.y + half);
+        const u = tickDir(p);
+        setLine(hSelected.current!, p.x - u.x * half, p.y - u.y * half, p.x + u.x * half, p.y + u.y * half);
         // Dimmed less than its neighbours: it has to stay findable on the far side.
         hSelected.current!.setAttribute('stroke-opacity', String(Math.max(opacity(h), 0.6)));
         // Label beside the tick, level with its centre, on the side away from the ring's
@@ -229,10 +255,13 @@ export function ControlsOverlay() {
         const ox = (p.x - axis.x) / out;
         const oy = (p.y - axis.y) / out;
         const sideways = Math.min(1, Math.abs(ox) / 0.35);
+        // In a top view the tick points outward, so the label goes beyond its outer end.
+        const lx = p.x + Math.sign(ox) * sideways * 22;
+        const ly = p.y + oy * (1 - sideways) * (half + 10);
         setText(
           hLabel.current!,
-          p.x + Math.sign(ox) * sideways * 22,
-          p.y + oy * (1 - sideways) * (half + 10),
+          lx + (p.x + ox * (half + 18) - lx) * topView,
+          ly + (p.y + oy * (half + 12) - ly) * topView,
           `${h}°`,
         );
         setEllipse(hHit.current!, axis.x, axis.y, rr * spanX, rr * spanY);
@@ -247,31 +276,44 @@ export function ControlsOverlay() {
         if (length > 1) sDir = { x: dx / length, y: dy / length };
         const perUnit = length / sMax;
         const step = pickStep(perUnit);
+        // Ticks stand straight up from the line, or in a top view at right angles to it,
+        // on its left as seen going outward.
+        const n = topView > 0 ? turn(UP, { x: sDir.y, y: -sDir.x }, topView) : UP;
         setLine(radiusLine.current!, axis.x, axis.y, wall.x, wall.y);
         const pool = pools.s;
         pool.begin();
         for (let v = 0; v <= sMax; v += step) {
-          const style = tickStyle(Math.abs(v - s), perUnit, bump.s);
+          const style = tickStyle(Math.abs(v - s), perUnit, bump.s, OUTLINE_GREY);
           if (!style) continue;
           const bx = axis.x + (dx * v) / sMax;
           const by = axis.y + (dy * v) / sMax;
-          pool.add(bx, by - SAT_GAP, bx, by - SAT_GAP - style.length, style.stroke, tickWeight(v, perUnit));
+          const near = SAT_GAP;
+          const far = SAT_GAP + style.length;
+          pool.add(
+            bx + n.x * near,
+            by + n.y * near,
+            bx + n.x * far,
+            by + n.y * far,
+            style.stroke,
+            tickWeight(v, perUnit),
+          );
         }
         pool.end();
         const bx = axis.x + (dx * s) / sMax;
         const by = axis.y + (dy * s) / sMax;
-        setLine(sSelected.current!, bx, by - SAT_GAP, bx, by - SAT_GAP - TICK_SELECTED);
-        setText(sLabel.current!, bx, by - SAT_GAP - TICK_SELECTED - 9, space.sLabel(s));
+        const tip = SAT_GAP + TICK_SELECTED;
+        setLine(sSelected.current!, bx + n.x * SAT_GAP, by + n.y * SAT_GAP, bx + n.x * tip, by + n.y * tip);
+        setText(sLabel.current!, bx + n.x * (tip + 11), by + n.y * (tip + 9), space.sLabel(s));
         // When the radius points at the camera, keep a grabbable stub around it.
         // The grab stroke follows the ticks, not the line.
         const pad = Math.max(0, (24 - length) / 2);
         const lift = SAT_GAP + TICK / 2;
         setLine(
           sHit.current!,
-          axis.x - sDir.x * pad,
-          axis.y - sDir.y * pad - lift,
-          wall.x + sDir.x * pad,
-          wall.y + sDir.y * pad - lift,
+          axis.x - sDir.x * pad + n.x * lift,
+          axis.y - sDir.y * pad + n.y * lift,
+          wall.x + sDir.x * pad + n.x * lift,
+          wall.y + sDir.y * pad + n.y * lift,
         );
         sHit.current!.style.cursor = cursorAlong(sDir.x, sDir.y);
       }

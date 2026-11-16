@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ControlsOverlay } from './controls/ControlsOverlay';
 import { SPACES, type SpaceId, formatIn, spaceOf, toHex } from './lib/spaces';
 import { Panel } from './panel/Panel';
@@ -11,9 +11,13 @@ export function App() {
   const [panelOpen, setPanelOpen] = useState(false);
   return (
     <div className={panelOpen ? 'app is-panel-open' : 'app'}>
-      <div className="stage" ref={setStage}>
-        {stage && <Scene stage={stage} />}
-        <ControlsOverlay />
+      <div className="main">
+        <div className="stage" ref={setStage}>
+          {stage && <Scene stage={stage} />}
+          <ControlsOverlay />
+        </div>
+        {/* Outside the stage, so presses on it never reach the orbit controls. */}
+        <UndoButton />
       </div>
       <SpacePicker />
       <button
@@ -33,6 +37,40 @@ export function App() {
       <Readout />
       <Panel onClose={() => setPanelOpen(false)} />
     </div>
+  );
+}
+
+/** Top right, shown only when there is something to undo. Ctrl/Cmd+Z does the same. */
+function UndoButton() {
+  const canUndo = useStore((s) => s.past.length > 0);
+  const undo = useStore((s) => s.undo);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'z' || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+      const t = e.target;
+      // Text fields keep their own undo.
+      if (t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable))
+        return;
+      e.preventDefault();
+      useStore.getState().undo();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+  if (!canUndo) return null;
+  return (
+    <button type="button" className="undo-button" aria-label="Undo" title="Undo" onClick={undo}>
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+        <path
+          d="M6.5 3.5L3 7l3.5 3.5M3 7h7.5a4 4 0 010 8H8"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
   );
 }
 

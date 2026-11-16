@@ -12,6 +12,11 @@ const SPACING_FULL = 8;
 /** Tick levels, in units. Each is a multiple of the one before, so levels nest. */
 const LEVELS = [1, 5, 10, 20];
 const GREY = 150; // #969696
+/**
+ * The cylinder outline's grey. It is darker than the page but lighter than the colours
+ * inside the cylinder, so a line in it reads dark on the page and light on colour.
+ */
+export const OUTLINE_GREY = 210; // #d2d2d2
 const INK = 17; // #111
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -45,15 +50,16 @@ export function tickWeight(value: number, pixelsPerUnit: number): number {
  * Length and colour of an ordinary tick `distance` units from the selected value, or null
  * if it would collide with the selected tick. `bump` (0–1) is how strongly neighbours ease
  * towards the selected style: 0 leaves every ordinary tick short and grey, which is the
- * resting state; it rises to 1 while that scale is being dragged.
+ * resting state; it rises to 1 while that scale is being dragged. `grey` is the resting
+ * colour.
  */
-export function tickStyle(distance: number, pixelsPerUnit: number, bump: number) {
+export function tickStyle(distance: number, pixelsPerUnit: number, bump: number, grey = GREY) {
   const px = distance * pixelsPerUnit;
   if (px < CLEARANCE) return null;
   const t = Math.max(0, 1 - px / BUMP_PX);
   // Peaked rather than flat-topped, so the selected tick still stands clear of the bump.
   const e = t * t * bump;
-  const c = Math.round(GREY + (INK - GREY) * e);
+  const c = Math.round(grey + (INK - grey) * e);
   return { length: TICK + (TICK_SELECTED - TICK) * e, stroke: `rgb(${c},${c},${c})` };
 }
 

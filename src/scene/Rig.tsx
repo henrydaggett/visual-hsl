@@ -21,6 +21,9 @@ const CLICK_SLOP = 4;
 /** Fingers wobble more than a mouse. */
 const TAP_SLOP = 10;
 
+/** How far the orbit centre may be panned from the middle of the cylinder. */
+const PAN_LIMIT_XZ = R * 1.2;
+const PAN_LIMIT_Y = (HEIGHT / 2) * 1.2;
 const DEG = Math.PI / 180;
 /** The view settles onto these angles when released within SNAP_RANGE of one. */
 const SNAP_RANGE = 4 * DEG;
@@ -74,6 +77,18 @@ export function Rig({ stage }: { stage: HTMLElement }) {
     // Very gentle snapping: never during a gesture, only once released near a snap angle.
     // The setters go through the controls' damping, so the view eases onto the angle.
     const c = controls.current;
+    if (c) {
+      // Panning (right-drag, or two fingers) moves the orbit centre. Keep it on or near the
+      // cylinder so the model can never be dragged out of reach.
+      const t = c.target;
+      const dx = Math.max(-PAN_LIMIT_XZ, Math.min(PAN_LIMIT_XZ, t.x)) - t.x;
+      const dy = Math.max(-PAN_LIMIT_Y, Math.min(PAN_LIMIT_Y, t.y)) - t.y;
+      const dz = Math.max(-PAN_LIMIT_XZ, Math.min(PAN_LIMIT_XZ, t.z)) - t.z;
+      if (dx || dy || dz) {
+        t.set(t.x + dx, t.y + dy, t.z + dz);
+        camera.position.set(camera.position.x + dx, camera.position.y + dy, camera.position.z + dz);
+      }
+    }
     if (c && !interacting.current && useStore.getState().dragging === null) {
       const polar = snapTarget(c.getPolarAngle(), POLAR_SNAPS);
       if (polar !== null) c.setPolarAngle(polar);
@@ -147,7 +162,7 @@ export function Rig({ stage }: { stage: HTMLElement }) {
       onEnd={() => (interacting.current = false)}
       domElement={stage}
       enabled={dragging === null}
-      enablePan={false}
+      enablePan
       enableDamping
       dampingFactor={0.12}
       rotateSpeed={0.9}
