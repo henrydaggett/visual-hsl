@@ -18,8 +18,10 @@ import { HEIGHT, R, lightnessToY, polar, type Vec3 } from '../lib/space';
 import { selectedSwatch, useStore } from '../store';
 
 /** Fog density per world unit of depth: idle, and while a colour is selected. */
-const DENSITY_IDLE = 0.95;
-const DENSITY_SELECTED = 0.45;
+const DENSITY_IDLE = 1.4;
+const DENSITY_SELECTED = 0.6;
+/** Saturation boost applied to the blended fog colour: 1 leaves it as it is. */
+const VIVID = 1.25;
 const SLICE_OPACITY = 0.34;
 const FADE_SECONDS = 0.2;
 
@@ -180,7 +182,12 @@ const volumeFragment = /* glsl */ `
       colour += (1.0 - alpha) * sa * c.rgb;
       alpha += (1.0 - alpha) * sa;
     }
-    gl_FragColor = vec4(srgbToLinear(colour / max(alpha, 1e-4)), alpha);
+    // Blending many colours along a ray greys them out; push the result back away from
+    // its own grey to keep the fog vivid.
+    vec3 fog = colour / max(alpha, 1e-4);
+    float grey = dot(fog, vec3(0.299, 0.587, 0.114));
+    fog = clamp(mix(vec3(grey), fog, ${VIVID.toFixed(2)}), 0.0, 1.0);
+    gl_FragColor = vec4(srgbToLinear(fog), alpha);
     #include <colorspace_fragment>
   }
 `;
