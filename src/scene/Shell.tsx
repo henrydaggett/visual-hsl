@@ -16,6 +16,7 @@ import { CHROMA_WALL } from '../lib/oklch';
 import { spaceOf } from '../lib/spaces';
 import { HEIGHT, R, lightnessToY, polar, type Vec3 } from '../lib/space';
 import { selectedSwatch, useStore } from '../store';
+import { GRID_FULL, gridChunk, grid, gridTarget } from './fogGrid';
 import { morphPhase } from './morph';
 
 /** Fog density per world unit of depth: idle, and while a colour is selected. */
@@ -153,10 +154,36 @@ const colourChunk = /* glsl */ `
 const volumeFragment = /* glsl */ `
   uniform float uDensity;
   uniform float uVivid;
-  uniform float uFade;
+  uniform float uGridMix;
+  uniform sampler2D uGrid;
   uniform vec3 uToCamera;
   varying vec3 vPos;
   ${colourChunk}
+  ${gridChunk}
+
+  // While the space changes, the fog is drawn from a grid of the colours in motion
+  // (fogGrid.ts): their summed (rgb · weight, weight), read with trilinear filtering.
+  vec4 gridSum(vec3 p) {
+    vec3 cell = vec3(
+      (p.x + uRadius) / (2.0 * uRadius),
+      (p.y + 0.5 * uHeight) / uHeight,
+      (p.z + uRadius) / (2.0 * uRadius)
+    ) * GRID_N;
+    vec2 xz = clamp(cell.xz, 0.5, GRID_N - 0.5);
+    float y = clamp(cell.y - 0.5, 0.0, GRID_N - 1.0);
+    float k = floor(y);
+    vec4 a = texture2D(uGrid, gridTexel(k, xz) / GRID_SIZE);
+    vec4 b = texture2D(uGrid, gridTexel(min(k + 1.0, GRID_N - 1.0), xz) / GRID_SIZE);
+    return mix(a, b, y - k);
+  }
+
+  // The same as colourAt, but from the grid.
+  vec4 gridColourAt(vec3 p, out float inside) {
+    vec4 sum = gridSum(p);
+    inside = smoothstep(0.0, ${GRID_FULL.toFixed(2)}, sum.a);
+    vec3 rgb = clamp(sum.rgb / max(sum.a, 1e-4), 0.0, 1.0);
+    return vec4(rgb, max(max(rgb.r, rgb.g), rgb.b) - min(min(rgb.r, rgb.g), rgb.b));
+  }
 
   const int STEPS = 40;
 
@@ -182,8 +209,15 @@ const volumeFragment = /* glsl */ `
     float alpha = 0.0;
     for (int i = 0; i < STEPS; i++) {
       vec3 p = vPos + d * (t - (float(i) + jitter) * dt);
-      float inside;
-      vec4 c = colourAt(p, inside);
+      float inside = 0.0;
+      vec4 c = vec4(0.0);
+      if (uGridMix < 1.0) c = colourAt(p, inside);
+      if (uGridMix > 0.0) {
+        float gridInside;
+        vec4 g = gridColourAt(p, gridInside);
+        c = mix(c, g, uGridMix);
+        inside = mix(inside, gridInside, uGridMix);
+      }
       float sa = 1.0 - exp(-uDensity * inside * (0.12 + 0.88 * c.w) * dt);
       colour += (1.0 - alpha) * sa * c.rgb;
       alpha += (1.0 - alpha) * sa;
@@ -193,7 +227,7 @@ const volumeFragment = /* glsl */ `
     vec3 fog = colour / max(alpha, 1e-4);
     float grey = dot(fog, vec3(0.299, 0.587, 0.114));
     fog = clamp(mix(vec3(grey), fog, uVivid), 0.0, 1.0);
-    gl_FragColor = vec4(srgbToLinear(fog), alpha * uFade);
+    gl_FragColor = vec4(srgbToLinear(fog), alpha);
     #include <colorspace_fragment>
   }
 `;
@@ -226,7 +260,8 @@ export function Shell() {
         uniforms: {
           uDensity: { value: DENSITY_IDLE },
           uVivid: { value: VIVID_IDLE },
-          uFade: { value: 1 },
+          uGridMix: { value: 0 },
+          uGrid: { value: null },
           uToCamera: { value: new Vector3(0, 0, 1) },
           uRadius: { value: R },
           uHeight: { value: HEIGHT },
@@ -241,18 +276,14 @@ export function Shell() {
     [],
   );
   const geometry = useMemo(() => new CylinderGeometry(R, R, HEIGHT, 128, 1, false), []);
-  const mesh = useRef<Mesh>(null);
-
   useFrame(({ camera }, delta) => {
     const u = material.uniforms;
     const state = useStore.getState();
-    // While the space changes, the old space's fog fades out and the new one's fades in.
+    // While the space changes, the fog hands over to the grid of moving colours and back.
     const phase = morphPhase();
-    const old = phase.active && phase.fogOld > 0 && phase.from;
-    const space = spaceOf(old ? phase.from! : state.space);
-    u.uFade.value = phase.active ? (old ? phase.fogOld : phase.fogNew) : 1;
-    // Nothing to see: skip the ray-march entirely.
-    if (mesh.current) mesh.current.visible = u.uFade.value > 0.001;
+    const space = spaceOf(phase.formula ?? state.space);
+    u.uGridMix.value = grid.supported ? phase.grid : 0;
+    u.uGrid.value = gridTarget().texture;
     u.uSpace.value = space.shader;
     // Solids smaller than the cylinder get thicker fog to match.
     const boost = space.density;
@@ -264,7 +295,7 @@ export function Shell() {
     camera.getWorldDirection(u.uToCamera.value).negate();
   });
 
-  return <mesh ref={mesh} geometry={geometry} material={material} renderOrder={0} />;
+  return <mesh geometry={geometry} material={material} renderOrder={0} />;
 }
 
 /**
@@ -309,7 +340,7 @@ export function Slice() {
     shown.current = approach(shown.current, swatch ? SLICE_OPACITY : 0, SLICE_OPACITY, delta);
     // Out of the way while the space changes.
     const u = material.uniforms.uOpacity;
-    u.value = shown.current * (1 - morphPhase().cloud);
+    u.value = shown.current * (morphPhase().active ? 0 : 1);
     if (!mesh.current) return;
     if (swatch) mesh.current.position.y = lightnessToY(swatch.hsl.l);
     mesh.current.visible = u.value > 0.001;

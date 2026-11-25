@@ -4,6 +4,8 @@ import {
   CHROMA_FULL,
   CHROMA_WALL,
   maxChroma as oklchMaxChroma,
+  fromLinear,
+  oklchToLinear,
   oklchToRgb,
   rgbToOklch,
 } from './oklch';
@@ -41,6 +43,8 @@ type ColourSpace = {
   radius: (hsl: HSL) => number;
   /** Where an sRGB colour sits in this space, unrounded. */
   place: (rgb: RGB) => Place;
+  /** The colour at a place in this space, or null if no sRGB colour sits there. */
+  colourAt: (place: Place) => RGB | null;
   format: (hsl: HSL) => string;
   /** How the middle value reads on its scale. */
   sLabel: (s: number) => string;
@@ -77,6 +81,7 @@ export const SPACES: ColourSpace[] = [
       const radius = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
       return { h: rgbHue(r, g, b), radius, l: l * 100 };
     },
+    colourAt: ({ h, radius, l }) => hslToRgb({ h, s: radius * 100, l }),
     format: formatHsl,
     sLabel: String,
     shader: 0,
@@ -102,6 +107,7 @@ export const SPACES: ColourSpace[] = [
       const d = max - Math.min(r, g, b);
       return { h: rgbHue(r, g, b), radius: max === 0 ? 0 : d / max, l: max * 100 };
     },
+    colourAt: ({ h, radius, l }) => hsvToRgb(h, radius, l / 100),
     format: ({ h, s, l }) => `hsv(${h}, ${s}%, ${l}%)`,
     sLabel: String,
     shader: 2,
@@ -128,6 +134,12 @@ export const SPACES: ColourSpace[] = [
       const { h, s, l } = rgbToHsluv(...rgb);
       return { h, radius: ((s / 100) * hsluvMaxChroma(l, h)) / MAX_CHROMA, l };
     },
+    colourAt: ({ h, radius, l }) => {
+      const max = hsluvMaxChroma(l, h);
+      const chroma = radius * MAX_CHROMA;
+      if (chroma > max) return null;
+      return hsluvToRgb(h, max > 0 ? (chroma / max) * 100 : 0, l);
+    },
     format: ({ h, s, l }) => `hsluv(${h}, ${s}%, ${l}%)`,
     sLabel: String,
     shader: 1,
@@ -153,6 +165,11 @@ export const SPACES: ColourSpace[] = [
     place: (rgb) => {
       const { L, C, h } = rgbToOklch(...rgb);
       return { h, radius: C / CHROMA_WALL, l: L * 100 };
+    },
+    colourAt: ({ h, radius, l }) => {
+      const lin = oklchToLinear(l / 100, radius * CHROMA_WALL, h);
+      if (lin.some((c) => c < -1e-4 || c > 1 + 1e-4)) return null;
+      return lin.map((c) => Math.min(1, Math.max(0, fromLinear(c)))) as RGB;
     },
     format: ({ h, s, l }) => `oklch(${l}% ${chroma(s)} ${h})`,
     sLabel: (s) => chroma(s),

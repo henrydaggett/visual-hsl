@@ -9,7 +9,7 @@ export const CHROMA_FULL = 0.4;
 export const CHROMA_WALL = 0.33;
 
 const toLinear = (c: number) => (c > 0.04045 ? ((c + 0.055) / 1.055) ** 2.4 : c / 12.92);
-const fromLinear = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+export const fromLinear = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
 
 /** Linear sRGB for Oklab lightness `L` (0–1), chroma `C` and hue `h` (degrees). */
 export function oklchToLinear(L: number, C: number, h: number): [number, number, number] {

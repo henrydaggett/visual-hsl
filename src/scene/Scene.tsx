@@ -2,7 +2,7 @@ import { Canvas } from '@react-three/fiber';
 import { useEffect } from 'react';
 import { useStore } from '../store';
 import { startMorph } from './morph';
-import { MorphCloud } from './MorphCloud';
+import { FogSplat } from './FogSplat';
 import { Points } from './Points';
 import { CAMERA_DISTANCE, DEFAULT_AZIMUTH, DEFAULT_ELEVATION, Rig } from './Rig';
 import { Rims, Shell, Slice } from './Shell';
@@ -37,7 +37,7 @@ export function Scene({ stage }: { stage: HTMLElement }) {
       <Shell />
       <Slice />
       <Rims />
-      <MorphCloud />
+      <FogSplat />
       <Points />
     </Canvas>
   );

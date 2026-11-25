@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SPACES, fromHex, toRgb } from '../lib/spaces';
 import { hslToPosition, lerpCylinder, rgbToCylinder, toCylinder } from '../lib/space';
+import { HEIGHT_PX, N, TILE, WIDTH, sliceTileOrigin, worldToCell } from './fogGrid';
 import { DURATION, ease, phaseAt } from './morph';
 
 describe('placing colours for the animation', () => {
@@ -28,12 +29,29 @@ describe('placing colours for the animation', () => {
 
 describe('timeline', () => {
   const m = { id: 1, from: 'hsl' as const, to: 'oklch' as const };
-  it('starts on the old fog, flies, and ends on the new fog', () => {
-    expect(phaseAt(0, m)).toMatchObject({ active: true, fogOld: 1, fogNew: 0, cloud: 0, travel: 0 });
-    expect(phaseAt(450, m)).toMatchObject({ fogOld: 0, fogNew: 0, cloud: 1, travel: 0.5 });
-    expect(phaseAt(DURATION, m)).toMatchObject({ active: false, fogNew: 1, travel: 1 });
+  it('hands the fog to the moving colours, moves them, and hands it back', () => {
+    expect(phaseAt(0, m)).toMatchObject({ active: true, grid: 0, travel: 0, formula: 'hsl' });
+    expect(phaseAt(50, m)).toMatchObject({ grid: 0.5, travel: 0 });
+    expect(phaseAt(450, m)).toMatchObject({ grid: 1, travel: 0.5, formula: 'oklch' });
+    expect(phaseAt(850, m)).toMatchObject({ grid: 0.5, travel: 1, formula: 'oklch' });
+    expect(phaseAt(DURATION, m)).toMatchObject({ active: false, grid: 0, travel: 1 });
     expect(ease(0)).toBe(0);
     expect(ease(1)).toBe(1);
     expect(ease(0.5)).toBeCloseTo(0.5);
+  });
+});
+
+describe('fog grid', () => {
+  it('maps the cylinder onto the grid and every slice onto its own tile', () => {
+    expect(worldToCell([-1, -1.2, -1], 1, 2.4)).toEqual([0, 0, 0]);
+    expect(worldToCell([1, 1.2, 1], 1, 2.4)).toEqual([N, N, N]);
+    const seen = new Set<string>();
+    for (let k = 0; k < N; k++) {
+      const [x, y] = sliceTileOrigin(k);
+      expect(x + TILE).toBeLessThanOrEqual(WIDTH);
+      expect(y + TILE).toBeLessThanOrEqual(HEIGHT_PX);
+      seen.add(`${x},${y}`);
+    }
+    expect(seen.size).toBe(N);
   });
 });
