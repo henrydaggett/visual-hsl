@@ -305,8 +305,3 @@ its own frame loop. D can develop against a fixed mock camera until B lands.
   gamut edge. A swatch can hold more chroma than fits at its current hue and lightness; it
   is drawn at the edge and gets the chroma back when moved to where it fits.
 - **Cylinder radius** is 1.05 (5% wider).
-- **Moving fog between spaces.** On a change of colour space the fog itself flows into
-  the new shape: colours sampled evenly through both spaces' solids are splatted each
-  frame into a coarse grid of colour (`src/scene/fogGrid.ts`, `FogSplat.tsx`) at wherever
-  they have got to, and the fog shader reads that grid instead of its formula for the
-  0.9s the change takes. Swatch dots travel with their colours; controls hide meanwhile.

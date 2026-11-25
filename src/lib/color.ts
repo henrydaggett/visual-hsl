@@ -75,18 +75,6 @@ export function rgbToHsl(r: number, g: number, b: number, previous?: HSL): HSL {
   return normalizeHsl({ h: h * 60, s: s * 100, l: l * 100 });
 }
 
-/** Hue in degrees (0–360, unrounded) of sRGB channels in 0–1; 0 for greys. */
-export function rgbHue(r: number, g: number, b: number): number {
-  const max = Math.max(r, g, b);
-  const d = max - Math.min(r, g, b);
-  if (d === 0) return 0;
-  let h: number;
-  if (max === r) h = ((g - b) / d) % 6;
-  else if (max === g) h = (b - r) / d + 2;
-  else h = (r - g) / d + 4;
-  return (h * 60 + 360) % 360;
-}
-
 /** Parses a hex into whole-number HSL, or null if invalid. See `rgbToHsl` for greys. */
 export function parseHex(text: string, previous?: HSL): HSL | null {
   const rgb = parseHexRgb(text);

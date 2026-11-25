@@ -1,11 +1,9 @@
-import { type HSL, formatHsl, hslToRgb, normalizeHsl, parseHexRgb, rgbHue, rgbToHsl } from './color';
+import { type HSL, formatHsl, hslToRgb, normalizeHsl, parseHexRgb, rgbToHsl } from './color';
 import { MAX_CHROMA, hsluvToRgb, maxChroma as hsluvMaxChroma, rgbToHsluv } from './hsluv';
 import {
   CHROMA_FULL,
   CHROMA_WALL,
   maxChroma as oklchMaxChroma,
-  fromLinear,
-  oklchToLinear,
   oklchToRgb,
   rgbToOklch,
 } from './oklch';
@@ -19,13 +17,6 @@ import {
 export type SpaceId = 'hsl' | 'hsv' | 'hsluv' | 'oklch';
 
 type RGB = [number, number, number];
-
-/**
- * Where a colour sits in a space, unrounded: hue in degrees, distance from the axis as a
- * share of the cylinder's radius, and lightness 0–100. Used to animate between spaces,
- * where rounding to whole numbers would make colours visibly snap to a grid.
- */
-export type Place = { h: number; radius: number; l: number };
 
 type ColourSpace = {
   id: SpaceId;
@@ -41,10 +32,6 @@ type ColourSpace = {
   maxS: (h: number, l: number) => number;
   /** Distance from the axis, as a share of the cylinder's radius. */
   radius: (hsl: HSL) => number;
-  /** Where an sRGB colour sits in this space, unrounded. */
-  place: (rgb: RGB) => Place;
-  /** The colour at a place in this space, or null if no sRGB colour sits there. */
-  colourAt: (place: Place) => RGB | null;
   format: (hsl: HSL) => string;
   /** How the middle value reads on its scale. */
   sLabel: (s: number) => string;
@@ -73,15 +60,6 @@ export const SPACES: ColourSpace[] = [
     fromRgb: (rgb, previous) => rgbToHsl(...rgb, previous),
     maxS: () => 100,
     radius: ({ s }) => s / 100,
-    place: ([r, g, b]) => {
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const l = (max + min) / 2;
-      const d = max - min;
-      const radius = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
-      return { h: rgbHue(r, g, b), radius, l: l * 100 };
-    },
-    colourAt: ({ h, radius, l }) => hslToRgb({ h, s: radius * 100, l }),
     format: formatHsl,
     sLabel: String,
     shader: 0,
@@ -102,12 +80,6 @@ export const SPACES: ColourSpace[] = [
     },
     maxS: () => 100,
     radius: ({ s }) => s / 100,
-    place: ([r, g, b]) => {
-      const max = Math.max(r, g, b);
-      const d = max - Math.min(r, g, b);
-      return { h: rgbHue(r, g, b), radius: max === 0 ? 0 : d / max, l: max * 100 };
-    },
-    colourAt: ({ h, radius, l }) => hsvToRgb(h, radius, l / 100),
     format: ({ h, s, l }) => `hsv(${h}, ${s}%, ${l}%)`,
     sLabel: String,
     shader: 2,
@@ -130,16 +102,6 @@ export const SPACES: ColourSpace[] = [
     maxS: () => 100,
     // Radius is CIELUV chroma, so the colours form a lumpy solid inside the cylinder.
     radius: ({ h, s, l }) => ((s / 100) * hsluvMaxChroma(l, h)) / MAX_CHROMA,
-    place: (rgb) => {
-      const { h, s, l } = rgbToHsluv(...rgb);
-      return { h, radius: ((s / 100) * hsluvMaxChroma(l, h)) / MAX_CHROMA, l };
-    },
-    colourAt: ({ h, radius, l }) => {
-      const max = hsluvMaxChroma(l, h);
-      const chroma = radius * MAX_CHROMA;
-      if (chroma > max) return null;
-      return hsluvToRgb(h, max > 0 ? (chroma / max) * 100 : 0, l);
-    },
     format: ({ h, s, l }) => `hsluv(${h}, ${s}%, ${l}%)`,
     sLabel: String,
     shader: 1,
@@ -162,15 +124,6 @@ export const SPACES: ColourSpace[] = [
     },
     maxS: (h, l) => (oklchMaxChroma(l / 100, h) / CHROMA_FULL) * 100,
     radius: ({ s }) => ((s / 100) * CHROMA_FULL) / CHROMA_WALL,
-    place: (rgb) => {
-      const { L, C, h } = rgbToOklch(...rgb);
-      return { h, radius: C / CHROMA_WALL, l: L * 100 };
-    },
-    colourAt: ({ h, radius, l }) => {
-      const lin = oklchToLinear(l / 100, radius * CHROMA_WALL, h);
-      if (lin.some((c) => c < -1e-4 || c > 1 + 1e-4)) return null;
-      return lin.map((c) => Math.min(1, Math.max(0, fromLinear(c)))) as RGB;
-    },
     format: ({ h, s, l }) => `oklch(${l}% ${chroma(s)} ${h})`,
     sLabel: (s) => chroma(s),
     shader: 3,

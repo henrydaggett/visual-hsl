@@ -5,7 +5,6 @@ import type { OrthographicCamera } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { HEIGHT, R } from '../lib/space';
 import { useStore } from '../store';
-import { morphPhase } from './morph';
 import { pickSwatch } from './picking';
 import { getView, publishView } from './projection';
 
@@ -132,7 +131,7 @@ export function Rig({ stage }: { stage: HTMLElement }) {
       const slop = e.pointerType === 'touch' ? TAP_SLOP : CLICK_SLOP;
       if (Math.hypot(e.clientX - start.x, e.clientY - start.y) >= slop) return;
       const state = useStore.getState();
-      if (state.dragging !== null || morphPhase().active) return;
+      if (state.dragging !== null) return;
       state.select(hit(e));
     };
     const onCancel = () => {
