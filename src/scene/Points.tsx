@@ -1,5 +1,6 @@
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
+import type { Group } from 'three';
 import {
   BackSide,
   Color,
@@ -10,8 +11,15 @@ import {
 } from 'three';
 import type { HSL } from '../lib/color';
 import { type SpaceId, toRgb } from '../lib/spaces';
-import { hslToPosition } from '../lib/space';
+import {
+  type Cylindrical,
+  hslToPosition,
+  lerpCylinder,
+  rgbToCylinder,
+  toCylinder,
+} from '../lib/space';
 import { useStore } from '../store';
+import { ease, morphPhase } from './morph';
 import { POINT_RADIUS } from './picking';
 
 const sphere = new SphereGeometry(1, 32, 20);
@@ -39,8 +47,12 @@ function Point({
   selected: boolean;
   dimmed: boolean;
 }) {
+  const group = useRef<Group>(null);
   const outline = useRef<Mesh>(null);
   const fill = useRef<Mesh>(null);
+  /** Where this dot set off from in the current change of space, and which change. */
+  const journey = useRef<{ id: number; from: Cylindrical; to: Cylindrical } | null>(null);
+  const position = hslToPosition(hsl, space);
   const opacity = useRef(dimmed ? DIMMED : 1);
   const { h, s, l } = hsl;
   const color = useMemo(() => {
@@ -49,6 +61,21 @@ function Point({
   }, [space, h, s, l]);
 
   useFrame(({ camera }, delta) => {
+    // While the space changes, travel with the cloud from where this colour sat before.
+    const phase = morphPhase();
+    if (group.current) {
+      if (phase.active && phase.from && phase.to === space) {
+        if (journey.current?.id !== phase.id)
+          journey.current = {
+            id: phase.id,
+            from: rgbToCylinder(phase.from, toRgb(space, hsl)),
+            to: toCylinder(position),
+          };
+        group.current.position.set(...lerpCylinder(journey.current.from, journey.current.to, ease(phase.travel)));
+      } else {
+        group.current.position.set(...position);
+      }
+    }
     const px = selected ? OUTLINE_SELECTED_PX : OUTLINE_PX;
     outline.current?.scale.setScalar(POINT_RADIUS + px / camera.zoom);
     const step = ((1 - DIMMED) / FADE_SECONDS) * Math.min(delta, 0.1);
@@ -59,7 +86,7 @@ function Point({
   });
 
   return (
-    <group position={hslToPosition(hsl, space)}>
+    <group ref={group} position={position}>
       {/* Fill first, so its depth hides the hull behind it and a faded point shows the
           page through its fill rather than the dark hull. */}
       <mesh ref={fill} geometry={sphere} scale={POINT_RADIUS} renderOrder={3}>

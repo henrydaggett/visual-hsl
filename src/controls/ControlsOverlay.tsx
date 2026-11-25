@@ -10,6 +10,7 @@ import {
   worldToScreen,
 } from '../scene/projection';
 import { effective, spaceOf } from '../lib/spaces';
+import { morphPhase } from '../scene/morph';
 import { type Axis, selectedSwatch, useStore } from '../store';
 import {
   OUTLINE_GREY,
@@ -141,7 +142,8 @@ export function ControlsOverlay() {
       const view = getView();
       const swatch = selectedSwatch(useStore.getState());
       const group = root.current!;
-      if (!view || !swatch) {
+      // Hidden while the colour space changes, so ticks don't sit on dots in flight.
+      if (!view || !swatch || morphPhase().active) {
         group.style.display = 'none';
         return;
       }
